@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import villages, catchment, rainfall, estimation, report
+from app.routers import villages, catchment, rainfall, estimation, report, contour
 
 app = FastAPI(
     title="AI-based Village Pond Planning System",
@@ -34,6 +34,7 @@ app.include_router(catchment.router)
 app.include_router(rainfall.router)
 app.include_router(estimation.router)
 app.include_router(report.router)
+app.include_router(contour.router)
 
 
 @app.get("/")

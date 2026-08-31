@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import math
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
@@ -31,6 +32,14 @@ def _extract_bbox_coords(bbox: Union[Dict[str, float], Any]) -> tuple[float, flo
     )
 
 
+def _compute_resolution_m(min_lat: float, min_lon: float, max_lat: float, max_lon: float, grid_size: int = 100) -> float:
+    """Approximate average cell resolution in meters for a regular lat/lon grid."""
+    lat_rad = math.radians((min_lat + max_lat) / 2)
+    dy_m = (max_lat - min_lat) * 111_139
+    dx_m = (max_lon - min_lon) * 111_139 * math.cos(lat_rad)
+    return round(float((dy_m / grid_size + dx_m / grid_size) / 2), 2)
+
+
 def _synthetic_dem(
     bbox: Union[Dict[str, float], Any], seed: Optional[int] = None
 ) -> Dict[str, Any]:
@@ -41,6 +50,7 @@ def _synthetic_dem(
     and random noise, smoothed with scipy.ndimage.gaussian_filter.
     """
     min_lat, min_lon, max_lat, max_lon = _extract_bbox_coords(bbox)
+    resolution_m = _compute_resolution_m(min_lat, min_lon, max_lat, max_lon, 100)
 
     if seed is None:
         coord_key = f"{min_lat:.5f}_{min_lon:.5f}_{max_lat:.5f}_{max_lon:.5f}"
@@ -71,6 +81,7 @@ def _synthetic_dem(
     return {
         "source": "synthetic",
         "elevation": np.round(smoothed, 2).tolist(),
+        "resolution_m": resolution_m,
     }
 
 
@@ -83,6 +94,7 @@ def get_dem(bbox: Union[Dict[str, float], Any]) -> Dict[str, Any]:
     Always indicates the actual source used.
     """
     min_lat, min_lon, max_lat, max_lon = _extract_bbox_coords(bbox)
+    resolution_m = _compute_resolution_m(min_lat, min_lon, max_lat, max_lon, 100)
 
     # Attempt Open-Elevation API
     try:
@@ -114,6 +126,7 @@ def get_dem(bbox: Union[Dict[str, float], Any]) -> Dict[str, Any]:
                 return {
                     "source": "open-elevation",
                     "elevation": grid_2d,
+                    "resolution_m": resolution_m,
                 }
     except Exception as e:
         logger.warning("Open-Elevation lookup failed or timed out (%s). Falling back to synthetic DEM.", e)

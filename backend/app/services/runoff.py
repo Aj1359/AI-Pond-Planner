@@ -1,9 +1,13 @@
 """
-Runoff estimation (Rational Method) and pond sizing / ranking engine.
+Advanced Hydrological Runoff Estimation (SCS-CN & Rational Methods) and
+Pond Sizing Engine using 3D Inverted Trapezoidal Frustum Geometry.
 """
 from __future__ import annotations
 
-# Runoff coefficients by land type (typical published ranges, midpoints used)
+import math
+from typing import Any, Dict, List
+
+# Runoff coefficients by land type (Rational Method)
 RUNOFF_COEFFICIENTS = {
     "barren": 0.65,
     "fallow_cropland": 0.35,
@@ -14,71 +18,205 @@ RUNOFF_COEFFICIENTS = {
     "settlement": 0.55,
 }
 
-# Fraction of runoff lost to evaporation/seepage before capture, a simple
-# first-order approximation for the prototype (would be replaced by a
-# monthly water-balance model using PET data in the full system).
+# USDA Soil Conservation Service (SCS) Curve Numbers for Antecedent Moisture Condition II (AMC-II)
+CURVE_NUMBERS = {
+    "barren": 86,
+    "fallow_cropland": 76,
+    "cropland": 72,
+    "grassland": 68,
+    "forest": 55,
+    "rocky": 90,
+    "settlement": 82,
+}
+
+# Evaporation & conveyance loss factor
 LOSS_FACTOR = 0.20
 
-# Target fraction of annual runoff the pond should aim to capture
+# Target fraction of annual runoff to capture in standard design
 DEFAULT_CAPTURE_EFFICIENCY = 0.70
 
-# Practical depth bounds for a manually-excavated village pond
+# Embankment side slope ratio (z:1, horizontal:vertical). 1.5:1 is the civil standard for stable earthen slopes.
+SIDE_SLOPE_Z = 1.5
+
+# Standard freeboard allowance (m) above water level for storm waves/siltation
+FREEBOARD_M = 0.50
+
+# Practical excavation depth limits for village-scale farm/community ponds
 MIN_POND_DEPTH_M = 1.5
 MAX_POND_DEPTH_M = 4.0
+
+# Typical aspect ratio (Length : Width = 1.5 : 1) for hydraulic efficiency
+ASPECT_RATIO = 1.5
 
 
 def runoff_coefficient(land_type: str) -> float:
     return RUNOFF_COEFFICIENTS.get(land_type, 0.35)
 
 
+def scs_curve_number(land_type: str) -> int:
+    return CURVE_NUMBERS.get(land_type, 75)
+
+
 def estimate_runoff_volume(catchment_area_ha: float, mean_annual_rainfall_mm: float, land_type: str) -> float:
-    """Rational Method: Q (m3) = C * (P/1000) * A(m2), with loss factor."""
+    """
+    Computes annual harvestable runoff using a coupled SCS Curve Number (SCS-CN)
+    and Rational Method model, accounting for potential maximum soil retention (S)
+    and initial abstraction (Ia = 0.2*S).
+    """
     C = runoff_coefficient(land_type)
-    area_m2 = catchment_area_ha * 10_000
-    rainfall_m = mean_annual_rainfall_mm / 1000.0
-    gross_runoff_m3 = C * rainfall_m * area_m2
-    net_runoff_m3 = gross_runoff_m3 * (1 - LOSS_FACTOR)
+    CN = scs_curve_number(land_type)
+
+    # Potential maximum soil retention S (mm)
+    S = (25400.0 / CN) - 254.0
+    Ia = 0.2 * S  # Initial abstraction (canopy interception + depression storage)
+
+    P = mean_annual_rainfall_mm
+    if P > Ia:
+        # SCS-CN direct runoff depth (mm)
+        Q_scs_mm = ((P - Ia) ** 2) / (P - Ia + S)
+        # Combine SCS storm retention dynamics with annual Rational Method yield
+        effective_runoff_m = 0.65 * (Q_scs_mm / 1000.0) + 0.35 * (C * P / 1000.0)
+    else:
+        effective_runoff_m = C * (P / 1000.0) * 0.5
+
+    area_m2 = catchment_area_ha * 10_000.0
+    gross_runoff_m3 = effective_runoff_m * area_m2
+    net_runoff_m3 = gross_runoff_m3 * (1.0 - LOSS_FACTOR)
     return net_runoff_m3
+
+
+def _frustum_volume(top_area_m2: float, depth_m: float, side_slope: float = SIDE_SLOPE_Z, aspect: float = ASPECT_RATIO) -> tuple[float, float, float, float, float]:
+    """
+    Calculates storage volume and dimensions for an inverted trapezoidal frustum pond.
+    Returns: (volume_m3, L_top, W_top, L_bottom, W_bottom)
+    """
+    W_top = math.sqrt(top_area_m2 / aspect)
+    L_top = W_top * aspect
+
+    # Bottom dimensions after accounting for 2 * side_slope * depth
+    dx = 2.0 * side_slope * depth_m
+    L_bottom = max(1.0, L_top - dx)
+    W_bottom = max(1.0, W_top - dx)
+
+    A_bottom = L_bottom * W_bottom
+    A_top = L_top * W_top
+
+    # Prismoidal / Frustum volume formula: V = (d / 3) * (A_top + A_bottom + sqrt(A_top * A_bottom))
+    volume_m3 = (depth_m / 3.0) * (A_top + A_bottom + math.sqrt(A_top * A_bottom))
+    return volume_m3, L_top, W_top, L_bottom, W_bottom
+
+
+def _solve_top_area(target_volume_m3: float, depth_m: float, side_slope: float = SIDE_SLOPE_Z) -> float:
+    """Binary search inversion to find the exact top surface area required for an inverted frustum."""
+    low = (2.0 * side_slope * depth_m + 1.0) ** 2
+    high = max(low * 2, (target_volume_m3 / depth_m) * 2.5 + 500.0)
+
+    for _ in range(35):
+        mid = (low + high) / 2.0
+        v, _, _, _, _ = _frustum_volume(mid, depth_m, side_slope)
+        if v < target_volume_m3:
+            low = mid
+        else:
+            high = mid
+
+    return (low + high) / 2.0
 
 
 def recommend_pond_dimensions(
     annual_runoff_m3: float,
     available_land_m2: float,
     capture_efficiency: float = DEFAULT_CAPTURE_EFFICIENCY,
-) -> dict:
-    """Solve for pond surface area & depth to capture target volume,
-    constrained by available land and practical depth limits."""
+) -> Dict[str, Any]:
+    """
+    Optimizes pond depth (d) and surface area (A_top) to capture target runoff volume
+    using realistic 3D inverted trapezoidal frustum geometry.
+    
+    Minimizes evaporation losses (proportional to surface area) while honoring
+    land constraints and civil stability slope standards.
+    """
     target_volume_m3 = annual_runoff_m3 * capture_efficiency
 
-    # Start from a mid-range depth and derive the required surface area
-    depth_m = (MIN_POND_DEPTH_M + MAX_POND_DEPTH_M) / 2
-    required_area_m2 = target_volume_m3 / depth_m
+    # Search for the optimal depth that balances water preservation with available land
+    best_depth = 3.0
+    best_area = available_land_m2
 
-    if required_area_m2 > available_land_m2:
-        # Land-constrained: use all available land, increase depth instead
-        required_area_m2 = available_land_m2
-        depth_m = target_volume_m3 / required_area_m2 if required_area_m2 > 0 else MIN_POND_DEPTH_M
-        depth_m = max(MIN_POND_DEPTH_M, min(depth_m, MAX_POND_DEPTH_M))
+    if target_volume_m3 <= 0:
+        return {
+            "recommended_depth_m": MIN_POND_DEPTH_M,
+            "recommended_surface_area_m2": 0.0,
+            "storage_capacity_m3": 0.0,
+            "capture_efficiency_pct": 0.0,
+            "top_length_m": 0.0,
+            "top_width_m": 0.0,
+            "bottom_length_m": 0.0,
+            "bottom_width_m": 0.0,
+            "side_slope_ratio": SIDE_SLOPE_Z,
+            "freeboard_m": FREEBOARD_M,
+            "total_depth_m": MIN_POND_DEPTH_M + FREEBOARD_M,
+        }
 
-    storage_capacity_m3 = required_area_m2 * depth_m
-    actual_capture_pct = (storage_capacity_m3 / annual_runoff_m3 * 100) if annual_runoff_m3 > 0 else 0.0
+    # Evaluate candidate depths from deep (evaporation-efficient) to shallow
+    depth_candidates = [3.5, 3.0, 2.5, 2.0, 1.8, 1.5]
+    selected_depth = depth_candidates[0]
+    required_top_area = _solve_top_area(target_volume_m3, selected_depth)
+
+    if required_top_area > available_land_m2:
+        # Land is constrained: use maximum permitted excavation depth (up to 4.0m) with full available land
+        selected_depth = MAX_POND_DEPTH_M
+        required_top_area = available_land_m2
+        vol, L_top, W_top, L_bottom, W_bottom = _frustum_volume(required_top_area, selected_depth)
+        
+        # If capacity still exceeds target at 4.0m, scale depth down
+        if vol > target_volume_m3:
+            # Binary search for depth at fixed available_land_m2
+            d_low, d_high = MIN_POND_DEPTH_M, MAX_POND_DEPTH_M
+            for _ in range(25):
+                d_mid = (d_low + d_high) / 2.0
+                v_test, _, _, _, _ = _frustum_volume(available_land_m2, d_mid)
+                if v_test < target_volume_m3:
+                    d_low = d_mid
+                else:
+                    d_high = d_mid
+            selected_depth = d_high
+            vol, L_top, W_top, L_bottom, W_bottom = _frustum_volume(available_land_m2, selected_depth)
+    else:
+        # Pick the most efficient depth that fits within available land
+        for d in depth_candidates:
+            area_d = _solve_top_area(target_volume_m3, d)
+            if area_d <= available_land_m2:
+                selected_depth = d
+                required_top_area = area_d
+                break
+        vol, L_top, W_top, L_bottom, W_bottom = _frustum_volume(required_top_area, selected_depth)
+
+    actual_capture_pct = (vol / annual_runoff_m3 * 100.0) if annual_runoff_m3 > 0 else 0.0
 
     return {
-        "recommended_depth_m": round(depth_m, 2),
-        "recommended_surface_area_m2": round(required_area_m2, 1),
-        "storage_capacity_m3": round(storage_capacity_m3, 1),
+        "recommended_depth_m": round(selected_depth, 2),
+        "recommended_surface_area_m2": round(required_top_area, 1),
+        "storage_capacity_m3": round(vol, 1),
         "capture_efficiency_pct": round(min(actual_capture_pct, 100.0), 1),
+        "top_length_m": round(L_top, 2),
+        "top_width_m": round(W_top, 2),
+        "bottom_length_m": round(L_bottom, 2),
+        "bottom_width_m": round(W_bottom, 2),
+        "side_slope_ratio": SIDE_SLOPE_Z,
+        "freeboard_m": FREEBOARD_M,
+        "total_depth_m": round(selected_depth + FREEBOARD_M, 2),
     }
 
 
-def rank_candidates(estimates: list[dict], suitability_scores: dict[int, float]) -> list[dict]:
-    """Weighted score: 50% storage capacity (normalized), 30% land
-    suitability, 20% capture efficiency. Returns estimates sorted desc
-    with a rank_score and short justification attached."""
+def rank_candidates(estimates: List[Dict[str, Any]], suitability_scores: Dict[int, float]) -> List[Dict[str, Any]]:
+    """
+    Weighted composite ranking model:
+      - 50%: Normalized storage capacity
+      - 30%: Land & slope suitability
+      - 20%: Runoff capture efficiency
+    """
     if not estimates:
         return []
 
-    max_storage = max(e["storage_capacity_m3"] for e in estimates) or 1.0
+    max_storage = max((e["storage_capacity_m3"] for e in estimates), default=1.0) or 1.0
 
     ranked = []
     for e in estimates:
@@ -87,12 +225,12 @@ def rank_candidates(estimates: list[dict], suitability_scores: dict[int, float])
         suitability = suitability_scores.get(cid, 0.5)
         capture = e["capture_efficiency_pct"] / 100.0
 
-        score = 0.5 * norm_storage + 0.3 * suitability + 0.2 * capture
+        score = 0.50 * norm_storage + 0.30 * suitability + 0.20 * capture
         justification = (
-            f"Estimated {e['storage_capacity_m3']:.0f} m³ storage from a "
-            f"{e['catchment_area_ha']:.1f} ha catchment, capturing "
-            f"{e['capture_efficiency_pct']:.0f}% of annual runoff; "
-            f"site suitability {suitability:.2f}/1.0."
+            f"Frustum pond capacity: {e['storage_capacity_m3']:,.0f} m³ (depth: {e['recommended_depth_m']}m, "
+            f"top area: {e['recommended_surface_area_m2']:,.0f} m² with 1.5:1 side slopes); "
+            f"captures {e['capture_efficiency_pct']:.0f}% of {e['annual_runoff_volume_m3']:,.0f} m³ runoff "
+            f"from a {e['catchment_area_ha']:.1f} ha catchment. Suitability: {suitability:.2f}/1.0."
         )
         ranked.append({**e, "rank_score": round(score, 3), "justification": justification})
 
