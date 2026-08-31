@@ -1,19 +1,62 @@
-from typing import List, Union
+"""Pydantic request/response models shared across routers."""
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
 class BoundingBox(BaseModel):
-    min_lat: float = Field(..., description="Minimum latitude (South)")
-    min_lon: float = Field(..., description="Minimum longitude (West)")
-    max_lat: float = Field(..., description="Maximum latitude (North)")
-    max_lon: float = Field(..., description="Maximum longitude (East)")
+    min_lat: float
+    min_lon: float
+    max_lat: float
+    max_lon: float
 
 
 class VillageQuery(BaseModel):
-    name: str = Field(..., description="Village or area name")
-    bbox: BoundingBox = Field(..., description="Geographic bounding box for the village")
+    name: str
+    bbox: BoundingBox
 
 
-class DEMResponse(BaseModel):
-    source: str = Field(..., description="Source of the DEM data ('open-elevation' or 'synthetic')")
-    elevation: List[List[float]] = Field(..., description="100x100 2D grid of elevation values in meters")
+class ContourResponse(BaseModel):
+    interval_m: float
+    geojson: dict
+
+
+class CandidateSite(BaseModel):
+    id: int
+    lat: float
+    lon: float
+    slope_pct: float
+    land_type: str
+    suitability_score: float
+
+
+class CatchmentResult(BaseModel):
+    candidate_id: int
+    area_ha: float
+    geojson: dict
+
+
+class RainfallSummary(BaseModel):
+    village: str
+    years: int
+    mean_annual_mm: float
+    monthly_avg_mm: List[float] = Field(..., description="12 values, Jan..Dec")
+    source: str
+
+
+class RunoffEstimate(BaseModel):
+    candidate_id: int
+    catchment_area_ha: float
+    runoff_coefficient: float
+    mean_annual_rainfall_mm: float
+    annual_runoff_volume_m3: float
+    recommended_depth_m: float
+    recommended_surface_area_m2: float
+    storage_capacity_m3: float
+    capture_efficiency_pct: float
+
+
+class RecommendationItem(BaseModel):
+    candidate: CandidateSite
+    runoff: RunoffEstimate
+    rank_score: float
+    justification: str

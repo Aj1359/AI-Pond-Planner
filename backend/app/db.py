@@ -1,21 +1,36 @@
+"""
+Supabase client setup. Requires SUPABASE_URL and SUPABASE_SERVICE_KEY
+environment variables (see backend/.env.example).
+
+The service_role key is used because this client runs entirely
+server-side inside the FastAPI backend and needs full read/write access
+to every table. Never ship the service_role key to a browser/frontend —
+if you ever call Supabase directly from the frontend, use the anon key
+plus Row Level Security policies instead.
+"""
+from __future__ import annotations
+
 import os
-import logging
+
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-logger = logging.getLogger(__name__)
-
-# Load environment variables from .env file
 load_dotenv()
 
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
-if not supabase_url or not supabase_key:
-    logger.warning("SUPABASE_URL and/or SUPABASE_SERVICE_KEY are not set in the environment variables.")
-    # Initialize as None or dummy during startup if env variables are not yet present, 
-    # to avoid failing import when starting the app or running offline tests,
-    # but raise error when actually attempting to call the client.
-    supabase: Client = None
-else:
-    supabase: Client = create_client(supabase_url, supabase_key)
+_client: Client | None = None
+
+
+def get_client() -> Client:
+    global _client
+    if _client is None:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise RuntimeError(
+                "SUPABASE_URL and SUPABASE_SERVICE_KEY must be set (see .env.example). "
+                "Create a project at https://supabase.com, run backend/supabase/schema.sql "
+                "in its SQL editor, then copy the Project URL and service_role key into your .env."
+            )
+        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return _client

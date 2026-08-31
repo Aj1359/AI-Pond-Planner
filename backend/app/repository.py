@@ -1,140 +1,219 @@
-from typing import Any, Dict, List, Optional
-from app.db import supabase
+"""
+Repository layer: every read/write to Supabase (Postgres) goes through
+here. Routers and services never call the Supabase client directly —
+this keeps the persistence layer swappable (e.g. for a future direct
+psycopg2/SQLAlchemy connection) without touching business logic.
+"""
+from __future__ import annotations
 
-def _get_client():
-    if supabase is None:
-        raise RuntimeError(
-            "Supabase client is not initialized. "
-            "Please ensure SUPABASE_URL and SUPABASE_SERVICE_KEY are set in your environment / .env file."
+from app.db import get_client
+
+
+# ---------------------------------------------------------------- villages
+def upsert_village(name: str, bbox: dict) -> dict:
+    client = get_client()
+    existing = client.table("villages").select("*").eq("name", name).execute()
+    if existing.data:
+        village = existing.data[0]
+        client.table("villages").update(
+            {
+                "min_lat": bbox["min_lat"],
+                "min_lon": bbox["min_lon"],
+                "max_lat": bbox["max_lat"],
+                "max_lon": bbox["max_lon"],
+            }
+        ).eq("id", village["id"]).execute()
+        return village
+    result = (
+        client.table("villages")
+        .insert(
+            {
+                "name": name,
+                "min_lat": bbox["min_lat"],
+                "min_lon": bbox["min_lon"],
+                "max_lat": bbox["max_lat"],
+                "max_lon": bbox["max_lon"],
+            }
         )
-    return supabase
+        .execute()
+    )
+    return result.data[0]
 
-def upsert_village(
-    name: str, 
-    min_lat: float, 
-    min_lon: float, 
-    max_lat: float, 
-    max_lon: float
-) -> Dict[str, Any]:
-    """
-    Upserts a village record based on its unique name.
-    Returns the created/updated village record dict.
-    """
-    client = _get_client()
-    payload = {
-        "name": name,
-        "min_lat": min_lat,
-        "min_lon": min_lon,
-        "max_lat": max_lat,
-        "max_lon": max_lon,
+
+def get_village(name: str) -> dict:
+    client = get_client()
+    res = client.table("villages").select("*").eq("name", name).execute()
+    if not res.data:
+        raise KeyError(f"No village named '{name}'. Call POST /init first.")
+    return res.data[0]
+
+
+def village_bbox(village: dict) -> dict:
+    return {
+        "min_lat": village["min_lat"],
+        "min_lon": village["min_lon"],
+        "max_lat": village["max_lat"],
+        "max_lon": village["max_lon"],
     }
-    response = client.table("villages").upsert(payload, on_conflict="name").execute()
-    if not response.data:
-        raise RuntimeError(f"Failed to upsert village '{name}'")
-    return response.data[0]
 
-def get_village_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves a village record by its name. Returns None if not found.
-    """
-    client = _get_client()
-    response = client.table("villages").select("*").eq("name", name).execute()
-    return response.data[0] if response.data else None
 
-def save_dem(village_id: str, source: str, elevation: List[List[float]]) -> Dict[str, Any]:
-    """
-    Saves/updates the digital elevation model grid associated with a village.
-    """
-    client = _get_client()
+# --------------------------------------------------------------- dem_cache
+def save_dem(village_id: int, elevation, resolution_m: float, source: str) -> dict:
+    client = get_client()
     payload = {
         "village_id": village_id,
         "source": source,
+        "resolution_m": resolution_m,
         "elevation": elevation,
     }
-    response = client.table("dem_grids").upsert(payload).execute()
-    if not response.data:
-        raise RuntimeError(f"Failed to save DEM for village_id '{village_id}'")
-    return response.data[0]
+    existing = client.table("dem_cache").select("id").eq("village_id", village_id).execute()
+    if existing.data:
+        client.table("dem_cache").update(payload).eq("village_id", village_id).execute()
+    else:
+        client.table("dem_cache").insert(payload).execute()
+    return payload
 
-def get_dem(village_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves the DEM grid record for a village. Returns None if not found.
-    """
-    client = _get_client()
-    response = client.table("dem_grids").select("*").eq("village_id", village_id).execute()
-    return response.data[0] if response.data else None
 
-def save_rainfall(
-    village_id: str, 
-    source: str, 
-    mean_annual_mm: float, 
-    monthly_avg_mm: List[float], 
-    years: int
-) -> Dict[str, Any]:
-    """
-    Saves/updates the rainfall summary associated with a village.
-    """
-    client = _get_client()
+def get_dem(village_id: int) -> dict:
+    client = get_client()
+    res = client.table("dem_cache").select("*").eq("village_id", village_id).execute()
+    if not res.data:
+        raise KeyError("No DEM cached for this village. Call POST /init first.")
+    return res.data[0]
+
+
+def save_derived_layers(village_id: int, slope=None, flow_direction=None) -> None:
+    """Cache slope / flow-direction arrays on the same dem_cache row so
+    expensive terrain computations aren't repeated on every request."""
+    client = get_client()
+    update = {}
+    if slope is not None:
+        update["slope"] = slope
+    if flow_direction is not None:
+        update["flow_direction"] = flow_direction
+    if update:
+        client.table("dem_cache").update(update).eq("village_id", village_id).execute()
+
+
+# ---------------------------------------------------------- candidate_sites
+def save_candidate_sites(village_id: int, candidates: list[dict]) -> list[dict]:
+    client = get_client()
+    # Clear old candidates for this village so re-running /init doesn't duplicate
+    client.table("candidate_sites").delete().eq("village_id", village_id).execute()
+
+    rows = [
+        {
+            "village_id": village_id,
+            "grid_row": c["row"],
+            "grid_col": c["col"],
+            "lat": c["lat"],
+            "lon": c["lon"],
+            "slope_pct": c["slope_pct"],
+            "land_type": c["land_type"],
+            "suitability_score": c["suitability_score"],
+        }
+        for c in candidates
+    ]
+    result = client.table("candidate_sites").insert(rows).execute()
+    return result.data
+
+
+def get_candidate_sites(village_id: int) -> list[dict]:
+    client = get_client()
+    res = (
+        client.table("candidate_sites")
+        .select("*")
+        .eq("village_id", village_id)
+        .order("suitability_score", desc=True)
+        .execute()
+    )
+    return res.data
+
+
+def get_candidate_site(candidate_id: int) -> dict:
+    client = get_client()
+    res = client.table("candidate_sites").select("*").eq("id", candidate_id).execute()
+    if not res.data:
+        raise KeyError(f"No candidate site with id {candidate_id}")
+    return res.data[0]
+
+
+# --------------------------------------------------------------- catchments
+def save_catchment(candidate_site_id: int, area_ha: float, geojson: dict) -> dict:
+    client = get_client()
+    payload = {"candidate_site_id": candidate_site_id, "area_ha": area_ha, "geojson": geojson}
+    existing = client.table("catchments").select("id").eq("candidate_site_id", candidate_site_id).execute()
+    if existing.data:
+        client.table("catchments").update(payload).eq("candidate_site_id", candidate_site_id).execute()
+    else:
+        client.table("catchments").insert(payload).execute()
+    return payload
+
+
+def get_catchment(candidate_site_id: int) -> dict | None:
+    client = get_client()
+    res = client.table("catchments").select("*").eq("candidate_site_id", candidate_site_id).execute()
+    return res.data[0] if res.data else None
+
+
+# ---------------------------------------------------------- rainfall_records
+def save_rainfall(village_id: int, summary: dict) -> dict:
+    client = get_client()
     payload = {
         "village_id": village_id,
-        "source": source,
-        "mean_annual_mm": mean_annual_mm,
-        "monthly_avg_mm": monthly_avg_mm,
-        "years": years,
+        "source": summary["source"],
+        "years": summary["years"],
+        "mean_annual_mm": summary["mean_annual_mm"],
+        "monthly_avg_mm": summary["monthly_avg_mm"],
     }
-    response = client.table("rainfall_summaries").upsert(payload).execute()
-    if not response.data:
-        raise RuntimeError(f"Failed to save rainfall for village_id '{village_id}'")
-    return response.data[0]
+    existing = client.table("rainfall_records").select("id").eq("village_id", village_id).execute()
+    if existing.data:
+        client.table("rainfall_records").update(payload).eq("village_id", village_id).execute()
+    else:
+        client.table("rainfall_records").insert(payload).execute()
+    return payload
 
-def get_rainfall(village_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves the rainfall summary record for a village. Returns None if not found.
-    """
-    client = _get_client()
-    response = client.table("rainfall_summaries").select("*").eq("village_id", village_id).execute()
-    return response.data[0] if response.data else None
 
-def save_candidate_sites(village_id: str, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Upserts a list of candidate sites for a village.
-    Translates the local candidate 'id' to 'candidate_id' in the database.
-    """
-    if not candidates:
+def get_rainfall(village_id: int) -> dict | None:
+    client = get_client()
+    res = client.table("rainfall_records").select("*").eq("village_id", village_id).execute()
+    return res.data[0] if res.data else None
+
+
+# ------------------------------------------------------ pond_recommendations
+def save_recommendation(candidate_site_id: int, estimate: dict) -> dict:
+    client = get_client()
+    payload = {
+        "candidate_site_id": candidate_site_id,
+        "runoff_coefficient": estimate["runoff_coefficient"],
+        "mean_annual_rainfall_mm": estimate["mean_annual_rainfall_mm"],
+        "annual_runoff_volume_m3": estimate["annual_runoff_volume_m3"],
+        "recommended_depth_m": estimate["recommended_depth_m"],
+        "recommended_surface_area_m2": estimate["recommended_surface_area_m2"],
+        "storage_capacity_m3": estimate["storage_capacity_m3"],
+        "capture_efficiency_pct": estimate["capture_efficiency_pct"],
+    }
+    existing = client.table("pond_recommendations").select("id").eq("candidate_site_id", candidate_site_id).execute()
+    if existing.data:
+        client.table("pond_recommendations").update(payload).eq("candidate_site_id", candidate_site_id).execute()
+    else:
+        client.table("pond_recommendations").insert(payload).execute()
+    return payload
+
+
+def update_recommendation_rank(candidate_site_id: int, rank_score: float, justification: str) -> None:
+    client = get_client()
+    client.table("pond_recommendations").update(
+        {"rank_score": rank_score, "justification": justification}
+    ).eq("candidate_site_id", candidate_site_id).execute()
+
+
+def get_recommendations_for_village(village_id: int) -> list[dict]:
+    """Joins pond_recommendations -> candidate_sites for all sites in a village."""
+    client = get_client()
+    sites = client.table("candidate_sites").select("id").eq("village_id", village_id).execute().data
+    site_ids = [s["id"] for s in sites]
+    if not site_ids:
         return []
-        
-    client = _get_client()
-    payload = []
-    for c in candidates:
-        payload.append({
-            "village_id": village_id,
-            "candidate_id": c.get("id"),
-            "row": c.get("row"),
-            "col": c.get("col"),
-            "lat": c.get("lat"),
-            "lon": c.get("lon"),
-            "slope_pct": c.get("slope_pct"),
-            "land_type": c.get("land_type"),
-            "suitability_score": c.get("suitability_score"),
-            "recommended_depth_m": c.get("recommended_depth_m"),
-            "recommended_surface_area_m2": c.get("recommended_surface_area_m2"),
-            "storage_capacity_m3": c.get("storage_capacity_m3"),
-            "capture_efficiency_pct": c.get("capture_efficiency_pct"),
-            "rank_score": c.get("rank_score"),
-            "justification": c.get("justification"),
-        })
-        
-    response = client.table("candidate_sites").upsert(payload, on_conflict="village_id,candidate_id").execute()
-    return response.data
-
-def get_candidate_sites(village_id: str) -> List[Dict[str, Any]]:
-    """
-    Retrieves candidate sites for a village sorted by rank_score descending.
-    """
-    client = _get_client()
-    response = client.table("candidate_sites") \
-        .select("*") \
-        .eq("village_id", village_id) \
-        .order("rank_score", desc=True) \
-        .execute()
-    return response.data
+    res = client.table("pond_recommendations").select("*").in_("candidate_site_id", site_ids).execute()
+    return res.data
