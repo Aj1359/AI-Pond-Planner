@@ -6,12 +6,12 @@ psycopg2/SQLAlchemy connection) without touching business logic.
 """
 from __future__ import annotations
 
-from app.db import get_client
+from app import db
 
 
 # ---------------------------------------------------------------- villages
 def upsert_village(name: str, bbox: dict) -> dict:
-    client = get_client()
+    client = db.get_client()
     existing = client.table("villages").select("*").eq("name", name).execute()
     if existing.data:
         village = existing.data[0]
@@ -41,7 +41,7 @@ def upsert_village(name: str, bbox: dict) -> dict:
 
 
 def get_village(name: str) -> dict:
-    client = get_client()
+    client = db.get_client()
     res = client.table("villages").select("*").eq("name", name).execute()
     if not res.data:
         raise KeyError(f"No village named '{name}'. Call POST /init first.")
@@ -59,7 +59,7 @@ def village_bbox(village: dict) -> dict:
 
 # --------------------------------------------------------------- dem_cache
 def save_dem(village_id: int, elevation, resolution_m: float, source: str) -> dict:
-    client = get_client()
+    client = db.get_client()
     payload = {
         "village_id": village_id,
         "source": source,
@@ -75,7 +75,7 @@ def save_dem(village_id: int, elevation, resolution_m: float, source: str) -> di
 
 
 def get_dem(village_id: int) -> dict:
-    client = get_client()
+    client = db.get_client()
     res = client.table("dem_cache").select("*").eq("village_id", village_id).execute()
     if not res.data:
         raise KeyError("No DEM cached for this village. Call POST /init first.")
@@ -85,7 +85,7 @@ def get_dem(village_id: int) -> dict:
 def save_derived_layers(village_id: int, slope=None, flow_direction=None) -> None:
     """Cache slope / flow-direction arrays on the same dem_cache row so
     expensive terrain computations aren't repeated on every request."""
-    client = get_client()
+    client = db.get_client()
     update = {}
     if slope is not None:
         update["slope"] = slope
@@ -97,7 +97,7 @@ def save_derived_layers(village_id: int, slope=None, flow_direction=None) -> Non
 
 # ---------------------------------------------------------- candidate_sites
 def save_candidate_sites(village_id: int, candidates: list[dict]) -> list[dict]:
-    client = get_client()
+    client = db.get_client()
     # Clear old candidates for this village so re-running /init doesn't duplicate
     client.table("candidate_sites").delete().eq("village_id", village_id).execute()
 
@@ -119,7 +119,7 @@ def save_candidate_sites(village_id: int, candidates: list[dict]) -> list[dict]:
 
 
 def get_candidate_sites(village_id: int) -> list[dict]:
-    client = get_client()
+    client = db.get_client()
     res = (
         client.table("candidate_sites")
         .select("*")
@@ -131,7 +131,7 @@ def get_candidate_sites(village_id: int) -> list[dict]:
 
 
 def get_candidate_site(candidate_id: int) -> dict:
-    client = get_client()
+    client = db.get_client()
     res = client.table("candidate_sites").select("*").eq("id", candidate_id).execute()
     if not res.data:
         raise KeyError(f"No candidate site with id {candidate_id}")
@@ -140,7 +140,7 @@ def get_candidate_site(candidate_id: int) -> dict:
 
 # --------------------------------------------------------------- catchments
 def save_catchment(candidate_site_id: int, area_ha: float, geojson: dict) -> dict:
-    client = get_client()
+    client = db.get_client()
     payload = {"candidate_site_id": candidate_site_id, "area_ha": area_ha, "geojson": geojson}
     existing = client.table("catchments").select("id").eq("candidate_site_id", candidate_site_id).execute()
     if existing.data:
@@ -151,14 +151,14 @@ def save_catchment(candidate_site_id: int, area_ha: float, geojson: dict) -> dic
 
 
 def get_catchment(candidate_site_id: int) -> dict | None:
-    client = get_client()
+    client = db.get_client()
     res = client.table("catchments").select("*").eq("candidate_site_id", candidate_site_id).execute()
     return res.data[0] if res.data else None
 
 
 # ---------------------------------------------------------- rainfall_records
 def save_rainfall(village_id: int, summary: dict) -> dict:
-    client = get_client()
+    client = db.get_client()
     payload = {
         "village_id": village_id,
         "source": summary["source"],
@@ -175,14 +175,14 @@ def save_rainfall(village_id: int, summary: dict) -> dict:
 
 
 def get_rainfall(village_id: int) -> dict | None:
-    client = get_client()
+    client = db.get_client()
     res = client.table("rainfall_records").select("*").eq("village_id", village_id).execute()
     return res.data[0] if res.data else None
 
 
 # ------------------------------------------------------ pond_recommendations
 def save_recommendation(candidate_site_id: int, estimate: dict) -> dict:
-    client = get_client()
+    client = db.get_client()
     payload = {
         "candidate_site_id": candidate_site_id,
         "runoff_coefficient": estimate["runoff_coefficient"],
@@ -202,7 +202,7 @@ def save_recommendation(candidate_site_id: int, estimate: dict) -> dict:
 
 
 def update_recommendation_rank(candidate_site_id: int, rank_score: float, justification: str) -> None:
-    client = get_client()
+    client = db.get_client()
     client.table("pond_recommendations").update(
         {"rank_score": rank_score, "justification": justification}
     ).eq("candidate_site_id", candidate_site_id).execute()
@@ -210,7 +210,7 @@ def update_recommendation_rank(candidate_site_id: int, rank_score: float, justif
 
 def get_recommendations_for_village(village_id: int) -> list[dict]:
     """Joins pond_recommendations -> candidate_sites for all sites in a village."""
-    client = get_client()
+    client = db.get_client()
     sites = client.table("candidate_sites").select("id").eq("village_id", village_id).execute().data
     site_ids = [s["id"] for s in sites]
     if not site_ids:
