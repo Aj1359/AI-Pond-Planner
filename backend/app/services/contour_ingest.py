@@ -1,181 +1,204 @@
 """
-Contour file ingestion service: parses KML/KMZ elevation contours and
-interpolates them into a regular 2D DEM grid using Delaunay triangulation.
+Contour map ingestion: KML/KMZ -> DEM grid.
+
+A contour map is a set of polylines, each labeled with a constant
+elevation (e.g. every vertex on the "280.0" line is at 280m). This is
+fundamentally different from the raster DEM used by the bbox-driven
+/init flow (elevation.py) — here we start with scattered, irregularly
+spaced (lon, lat, elevation) points and have to interpolate them onto a
+regular grid ourselves before any of the D8/slope/catchment machinery
+in terrain.py can run, since that machinery only understands raster
+grids.
+
+Nothing here is specific to any one input file: the bounding box, grid
+resolution, elevation range, and contour interval are all DERIVED from
+whatever file is uploaded, never hardcoded, so this generalizes to any
+KML/KMZ contour map with the same schema (Placemark name = elevation,
+LineString coordinates = lon,lat vertices along that elevation).
 """
 from __future__ import annotations
 
 import io
-import math
 import re
-import xml.etree.ElementTree as ET
 import zipfile
-from typing import Any, Dict, List, Tuple
+import xml.etree.ElementTree as ET
 
 import numpy as np
 from scipy.interpolate import griddata
 
+# Practical bounds on the derived grid size — protects against a
+# pathologically large/small input producing an unusable or
+# resource-exhausting grid, without hardcoding anything about location.
+MIN_GRID_DIM = 20
+MAX_GRID_DIM = 150
+TARGET_LONGEST_DIM = 100  # cells along the longer side of the AOI
 
-class ContourParseError(Exception):
-    """Raised when uploaded contour file is invalid or lacks elevation data."""
-    pass
+METERS_PER_DEGREE_LAT = 111_320.0  # standard approximation, latitude-independent
+
+
+class ContourParseError(ValueError):
+    """Raised when the uploaded file isn't a parseable KML/KMZ contour map."""
+
+
+def _strip_ns(tag: str) -> str:
+    """KML uses a default XML namespace (xmlns="http://www.opengis.net/kml/2.2"),
+    which makes every tag show up as '{http://...}Placemark' instead of
+    'Placemark' under ElementTree. Stripping it lets us match tags by
+    their plain name regardless of namespace, so this also tolerates
+    KML variants that declare a different/no namespace."""
+    return tag.split("}", 1)[-1] if "}" in tag else tag
 
 
 def _extract_kml_bytes(file_bytes: bytes, filename: str) -> bytes:
-    if filename.lower().endswith(".kmz"):
-        try:
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
-                kml_names = [n for n in z.namelist() if n.lower().endswith(".kml")]
-                if not kml_names:
-                    raise ContourParseError("KMZ archive contains no .kml files.")
-                return z.read(kml_names[0])
-        except zipfile.BadZipFile:
-            raise ContourParseError("Invalid KMZ archive file.")
-    return file_bytes
+    """KMZ is just a zip archive containing one or more .kml files
+    (conventionally doc.kml). Detect by filename extension first, then
+    fall back to sniffing the zip magic bytes in case the extension is
+    wrong/missing."""
+    is_kmz = filename.lower().endswith(".kmz") or file_bytes[:2] == b"PK"
+    if not is_kmz:
+        return file_bytes
+
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+        kml_names = [n for n in z.namelist() if n.lower().endswith(".kml")]
+        if not kml_names:
+            raise ContourParseError("KMZ archive contains no .kml file")
+        # Prefer doc.kml if present (KML spec convention), else take the first
+        preferred = next((n for n in kml_names if n.lower().endswith("doc.kml")), kml_names[0])
+        return z.read(preferred)
 
 
-def _extract_elevation_from_elem(elem: ET.Element) -> float | None:
-    # Try SimpleData or ExtendedData or name or description
-    for text_elem in elem.iter():
-        text = text_elem.text or ""
-        # Check for numeric pattern or key like elevation/elev/contour
-        match = re.search(r"[-+]?\d*\.\d+|\d+", text)
-        if match and any(k in (elem.tag.lower() + text_elem.tag.lower() + text.lower()) for k in ("elev", "contour", "alt", "height", "z", "m")):
-            try:
-                return float(match.group(0))
-            except ValueError:
-                pass
-
-    # Fallback to general number in name / description
-    name_el = elem.find(".//{*}name")
-    if name_el is not None and name_el.text:
-        match = re.search(r"[-+]?\d*\.\d+|\d+", name_el.text)
-        if match:
-            try:
-                return float(match.group(0))
-            except ValueError:
-                pass
-    return None
-
-
-def parse_contour_file(file_bytes: bytes, filename: str) -> List[Dict[str, Any]]:
-    """
-    Parses a KML/KMZ byte string and extracts contour lines with their 3D coordinates.
-    """
+def parse_contour_file(file_bytes: bytes, filename: str) -> list[dict]:
+    """Returns a list of {"elevation_m": float, "points": [(lon, lat), ...]}
+    — one entry per contour-line Placemark found in the file. Elevation
+    is read from each Placemark's <name>; falls back to skipping (with
+    the parse continuing) any Placemark whose name isn't a plain number,
+    since some KML exports include non-contour Placemarks (icons, labels)
+    alongside the contour lines."""
     kml_bytes = _extract_kml_bytes(file_bytes, filename)
+
     try:
         root = ET.fromstring(kml_bytes)
-    except Exception as e:
-        raise ContourParseError(f"Malformed KML/XML structure: {e}")
+    except ET.ParseError as e:
+        raise ContourParseError(f"Could not parse XML: {e}") from e
 
     contours = []
-    # Find all Placemarks or LineStrings
-    placemarks = root.findall(".//{*}Placemark")
-    if not placemarks:
-        # Check direct LineStrings
-        placemarks = root.findall(".//{*}LineString")
-
-    for pm in placemarks:
-        coord_node = pm.find(".//{*}coordinates")
-        if coord_node is None or not coord_node.text:
+    for elem in root.iter():
+        if _strip_ns(elem.tag) != "Placemark":
             continue
 
-        raw_coords = coord_node.text.strip().split()
-        parsed_pts = []
-        for c_str in raw_coords:
-            parts = c_str.split(",")
-            if len(parts) >= 2:
-                try:
-                    lon = float(parts[0])
-                    lat = float(parts[1])
-                    alt = float(parts[2]) if len(parts) >= 3 else None
-                    parsed_pts.append((lon, lat, alt))
-                except ValueError:
-                    continue
+        name_el = None
+        coords_text = None
+        for child in elem.iter():
+            tag = _strip_ns(child.tag)
+            if tag == "name" and name_el is None:
+                name_el = child
+            elif tag == "coordinates":
+                coords_text = child.text
 
-        if len(parsed_pts) < 2:
+        if name_el is None or coords_text is None:
             continue
 
-        elev = _extract_elevation_from_elem(pm)
-        if elev is None and parsed_pts[0][2] is not None:
-            elev = parsed_pts[0][2]
+        try:
+            elevation_m = float((name_el.text or "").strip())
+        except ValueError:
+            continue  # not a contour line (e.g. an icon/label Placemark) — skip, don't fail the whole file
 
-        if elev is None:
-            elev = 0.0
+        points = []
+        for token in coords_text.split():
+            parts = token.split(",")
+            if len(parts) < 2:
+                continue
+            lon, lat = float(parts[0]), float(parts[1])
+            points.append((lon, lat))
 
-        contours.append({
-            "elevation": elev,
-            "coordinates": [(p[0], p[1]) for p in parsed_pts],
-            "raw_pts": parsed_pts,
-        })
+        if len(points) >= 2:
+            contours.append({"elevation_m": elevation_m, "points": points})
 
     if not contours:
-        raise ContourParseError("No valid contour polylines found in KML file.")
-
+        raise ContourParseError(
+            "No valid contour Placemarks found (expected <name> = elevation, <LineString><coordinates>)"
+        )
     return contours
 
 
-def build_dem_from_contours(
-    contours: List[Dict[str, Any]], grid_size: int = 100
-) -> Dict[str, Any]:
-    """
-    Interpolates scattered contour vertices into a regular 2D DEM elevation grid.
-    """
-    all_lons = []
-    all_lats = []
-    all_elevs = []
+def _derive_grid_dimensions(lon_span: float, lat_span: float, mean_lat_deg: float) -> tuple[int, int, float]:
+    """Sizes the grid so cells are approximately square in real-world
+    metres, purely from the file's own coordinate extent — no fixed
+    village size assumed. Returns (rows, cols, cell_size_m)."""
+    meters_per_degree_lon = METERS_PER_DEGREE_LAT * np.cos(np.radians(mean_lat_deg))
+    width_m = lon_span * meters_per_degree_lon
+    height_m = lat_span * METERS_PER_DEGREE_LAT
 
+    longest_m = max(width_m, height_m)
+    cell_size_m = longest_m / TARGET_LONGEST_DIM if longest_m > 0 else 1.0
+
+    cols = int(np.clip(round(width_m / cell_size_m), MIN_GRID_DIM, MAX_GRID_DIM))
+    rows = int(np.clip(round(height_m / cell_size_m), MIN_GRID_DIM, MAX_GRID_DIM))
+    return rows, cols, cell_size_m
+
+
+def build_dem_from_contours(contours: list[dict]) -> dict:
+    """Interpolates scattered (lon, lat, elevation) contour vertices onto
+    a regular grid via linear (Delaunay-triangulation-based) interpolation,
+    with a nearest-neighbor fill for any grid cells outside the convex
+    hull of the input points (linear interpolation can't extrapolate).
+
+    Returns everything downstream code needs, all derived from the input:
+      - elevation: 2D grid
+      - bbox: {min_lat, min_lon, max_lat, max_lon} — the file's own extent
+      - resolution_m, rows, cols
+      - contour_count, elevation_range_m, interval_m — summary stats
+    """
+    all_lons, all_lats, all_elevs = [], [], []
     for c in contours:
-        elev = c["elevation"]
-        for lon, lat in c["coordinates"]:
+        for lon, lat in c["points"]:
             all_lons.append(lon)
             all_lats.append(lat)
-            all_elevs.append(elev)
+            all_elevs.append(c["elevation_m"])
 
-    min_lon, max_lon = min(all_lons), max(all_lons)
-    min_lat, max_lat = min(all_lats), max(all_lats)
+    lons = np.array(all_lons)
+    lats = np.array(all_lats)
+    elevs = np.array(all_elevs)
 
-    elevations_arr = np.array(all_elevs)
-    min_elev, max_elev = float(elevations_arr.min()), float(elevations_arr.max())
+    min_lon, max_lon = float(lons.min()), float(lons.max())
+    min_lat, max_lat = float(lats.min()), float(lats.max())
+    mean_lat = (min_lat + max_lat) / 2
 
-    # Detect interval
-    unique_elevs = sorted(set(round(e, 2) for e in all_elevs))
-    if len(unique_elevs) > 1:
-        diffs = np.diff(unique_elevs)
-        interval = float(np.median(diffs[diffs > 0.01])) if len(diffs) > 0 else 1.0
-    else:
-        interval = 1.0
+    rows, cols, cell_size_m = _derive_grid_dimensions(max_lon - min_lon, max_lat - min_lat, mean_lat)
 
-    # Grid coordinates
-    grid_x = np.linspace(min_lon, max_lon, grid_size)
-    grid_y = np.linspace(min_lat, max_lat, grid_size)
-    gx, gy = np.meshgrid(grid_x, grid_y)
+    grid_lon = np.linspace(min_lon, max_lon, cols)
+    grid_lat = np.linspace(min_lat, max_lat, rows)
+    mesh_lon, mesh_lat = np.meshgrid(grid_lon, grid_lat)
 
-    points = np.column_stack((all_lons, all_lats))
-    values = np.array(all_elevs)
+    # Downsample source points if there are a huge number of vertices —
+    # contour lines are highly redundant (many closely-spaced points along
+    # the same line contribute almost no extra interpolation information),
+    # so this keeps interpolation fast without materially changing the result.
+    max_source_points = 20_000
+    if len(lons) > max_source_points:
+        idx = np.linspace(0, len(lons) - 1, max_source_points).astype(int)
+        lons, lats, elevs = lons[idx], lats[idx], elevs[idx]
 
-    # Linear interpolation with nearest fill outside convex hull
-    grid_z = griddata(points, values, (gx, gy), method="linear")
-    grid_z_nearest = griddata(points, values, (gx, gy), method="nearest")
-    grid_z[np.isnan(grid_z)] = grid_z_nearest[np.isnan(grid_z)]
+    points = np.column_stack([lons, lats])
+    grid_elevation = griddata(points, elevs, (mesh_lon, mesh_lat), method="linear")
 
-    # Compute resolution in meters (approx haversine at latitude)
-    lat_rad = math.radians((min_lat + max_lat) / 2)
-    dy_m = (max_lat - min_lat) * 111_139
-    dx_m = (max_lon - min_lon) * 111_139 * math.cos(lat_rad)
-    resolution_m = float((dy_m / grid_size + dx_m / grid_size) / 2)
+    # Fill any NaNs (outside the convex hull of contour points) with nearest-neighbor
+    nan_mask = np.isnan(grid_elevation)
+    if nan_mask.any():
+        nearest_fill = griddata(points, elevs, (mesh_lon, mesh_lat), method="nearest")
+        grid_elevation[nan_mask] = nearest_fill[nan_mask]
+
+    unique_elevations = sorted(set(c["elevation_m"] for c in contours))
+    diffs = np.diff(unique_elevations)
+    interval_m = float(np.median(diffs)) if len(diffs) > 0 else None
 
     return {
-        "elevation": grid_z,
-        "bbox": {
-            "min_lat": min_lat,
-            "min_lon": min_lon,
-            "max_lat": max_lat,
-            "max_lon": max_lon,
-        },
-        "resolution_m": resolution_m,
+        "elevation": grid_elevation,
+        "bbox": {"min_lat": min_lat, "min_lon": min_lon, "max_lat": max_lat, "max_lon": max_lon},
+        "resolution_m": cell_size_m,
+        "rows": rows,
+        "cols": cols,
         "contour_count": len(contours),
-        "elevation_range_m": [min_elev, max_elev],
-        "interval_m": round(interval, 2),
-        "rows": grid_size,
-        "cols": grid_size,
+        "elevation_range_m": [float(min(unique_elevations)), float(max(unique_elevations))],
+        "interval_m": interval_m,
     }

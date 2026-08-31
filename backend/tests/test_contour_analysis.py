@@ -17,7 +17,11 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_contours.kml"
+FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "contours_1m.kml"
+    if (Path(__file__).parent / "fixtures" / "contours_1m.kml").exists()
+    else Path(__file__).parent / "fixtures" / "sample_contours.kml"
+)
 
 
 @pytest.fixture
