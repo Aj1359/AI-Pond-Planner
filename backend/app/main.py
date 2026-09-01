@@ -12,7 +12,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -20,11 +20,6 @@ app.add_middleware(
 
 @app.exception_handler(KeyError)
 async def key_error_handler(request: Request, exc: KeyError):
-    """repository.py raises KeyError for 'not found' lookups (unknown
-    village, unknown candidate). Without this handler FastAPI would return
-    a raw 500 with a stack trace instead of a clean, client-facing 404 —
-    important for a real API consumers (e.g. Postman, the frontend) can
-    build reliable error handling against."""
     message = str(exc).strip('"')
     return JSONResponse(status_code=404, content={"detail": message})
 

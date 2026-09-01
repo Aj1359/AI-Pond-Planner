@@ -74,7 +74,6 @@ def estimate_runoff_volume(catchment_area_ha: float, mean_annual_rainfall_mm: fl
     if P > Ia:
         # SCS-CN direct runoff depth (mm)
         Q_scs_mm = ((P - Ia) ** 2) / (P - Ia + S)
-        # Combine SCS storm retention dynamics with annual Rational Method yield
         effective_runoff_m = 0.65 * (Q_scs_mm / 1000.0) + 0.35 * (C * P / 1000.0)
     else:
         effective_runoff_m = C * (P / 1000.0) * 0.5
