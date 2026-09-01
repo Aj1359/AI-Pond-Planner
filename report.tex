@@ -41,7 +41,7 @@
 \lhead{Technical Report}
 \rfoot{Page \thepage}
 
-\title{\textbf{AI-Assisted Village Pond Planning and Watershed Analysis System} \\ \large Technical Architecture, Hydrological Modeling, and API Verification Report}
+\title{\textbf{AI-Assisted Village Pond Planning and Watershed Analysis System} \\ \large Technical Architecture, Hydrological Formulations, and API Verification Report}
 \author{\textbf{Development \& Engineering Team} \\ GitHub Repository: \url{https://github.com/Aj1359/AI-Pond-Planner.git}}
 \date{\today}
 
@@ -50,7 +50,7 @@
 \maketitle
 
 \begin{abstract}
-Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System}. The backend incorporates automated Area of Interest (AOI) bounding-box workflows alongside single-step KML/KMZ contour map upload analysis. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. Automated end-to-end integration tests (11/11 endpoints) and comprehensive pytest unit suites (29/29 tests) achieve 100\% pass rates.
+Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System}. The backend incorporates independent microservices for elevation and precipitation analysis alongside automated Area of Interest (AOI) bounding-box workflows and single-step KML/KMZ contour map upload analysis. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. Automated end-to-end integration tests (21 live steps) and comprehensive pytest unit suites (29/29 tests) achieve 100\% pass rates.
 \end{abstract}
 
 \tableofcontents
@@ -61,11 +61,12 @@ Rural water security relies heavily on community and farm ponds that collect sea
 
 The \textbf{AI-based Village Pond Planning System} automates the engineering pipeline:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Topographic Ingestion}: Fetches 100$\times$100 digital elevation models (DEM) or parses raw KML/KMZ contour lines.
+    \item \textbf{Independent Geospatial \& Climate Services}: Provides stand-alone API access to Digital Elevation Model (DEM) grids, point elevations, and 10-year monthly precipitation metrics.
+    \item \textbf{Upload-Driven Contour Ingestion}: Parses raw KML/KMZ contour polyline datasets, computes Delaunay triangulation DEMs, and derives topographic layers.
     \item \textbf{Terrain \& Slope Filtering}: Evaluates spatial gradients to identify natural depression sites with slopes $\le 6\%$.
     \item \textbf{Hydrological Delineation}: Resolves D8 flow directions to delineate exact contributing catchment basins.
-    \item \textbf{Runoff Modeling}: Coupes SCS-CN and precipitation records to compute harvestable water volume.
-    \item \textbf{Frustum Sizing Optimization}: Determines optimal surface area, excavation depth, and embankment geometry.
+    \item \textbf{Runoff Modeling}: Couples SCS-CN storm retention and precipitation records to compute harvestable water volume.
+    \item \textbf{Frustum Sizing Optimization}: Determines optimal surface area, excavation depth, and embankment geometry ($1.5:1$ slope, $+0.5\text{m}$ freeboard).
     \item \textbf{Automated Reporting}: Generates downloadable PDF dossiers and persists data in a cloud PostgreSQL/Supabase database.
 \end{enumerate}
 
@@ -100,7 +101,7 @@ The SCS-CN model computes direct surface runoff from mean annual precipitation (
     0 & \text{if } P \le I_a 
     \end{cases}
 \end{equation}
-The effective harvestable runoff depth combines the storm retention dynamics with annual Rational Method yield ($C \cdot P$):
+The effective harvestable runoff depth combines storm retention dynamics with annual Rational Method yield ($C \cdot P$):
 \begin{equation}
     Q_{\text{net}} = \left[ 0.65 \cdot \left(\frac{Q_{\text{SCS}}}{1000}\right) + 0.35 \cdot \left(\frac{C \cdot P}{1000}\right) \right] \times A_{\text{catchment}} \times (1 - L)
 \end{equation}
@@ -132,7 +133,7 @@ Settlement & 0.55 & 82 & 55.8 \\ \bottomrule
     \begin{equation}
         \text{Slope}_{i} = \frac{z(r,c) - z(r+\Delta r_i, c+\Delta c_i)}{\sqrt{\Delta r_i^2 + \Delta c_i^2}}
     \end{equation}
-    \item \textbf{Upstream BFS Watershed Delineation}: Reverse-traces all contributing cells flowing into the candidate pour point $(r_{\text{pour}}, c_{\text{pour}})$.
+    \item \textbf{Upstream BFS Watershed Delineation}: Reverse-traces all contributing cells flowing into candidate pour points.
     \item \textbf{Catchment Area}:
     \begin{equation}
         A_{\text{ha}} = \frac{N_{\text{cells}} \times \text{Cell Size (m)}^2}{10,000}
@@ -148,7 +149,7 @@ Candidates are ranked via a composite utility score balancing capacity, land qua
 \section{System Architecture and Database Design}
 
 \subsection{Repository Pattern and Database Schema}
-Database access is isolated in \texttt{app/repository.py}, interacting with a Supabase PostgreSQL instance. All entities are indexed and managed with foreign key cascade deletions.
+Database access is isolated in \texttt{app/repository.py}, interacting with a Supabase PostgreSQL instance.
 
 \begin{figure}[h!]
 \centering
@@ -169,93 +170,57 @@ Database access is isolated in \texttt{app/repository.py}, interacting with a Su
 \caption{Relational Database Schema in Supabase PostgreSQL}
 \end{figure}
 
-\section{Repository Structure}
-The repository is organized following clean architectural principles:
-\begin{verbatim}
-pond_planner/
-├── .gitignore
-├── docker-compose.yml
-├── README.md
-├── report.tex
-└── backend/
-    ├── Dockerfile
-    ├── requirements.txt
-    ├── test_api.py                         # End-to-end integration test runner
-    ├── app/
-    │   ├── db.py                           # Supabase client initializer
-    │   ├── main.py                         # FastAPI routing and exception handlers
-    │   ├── repository.py                   # Isolated PostgreSQL queries
-    │   ├── schemas.py                      # Pydantic models
-    │   ├── routers/
-    │   │   ├── catchment.py                # Watershed delineation router
-    │   │   ├── contour.py                  # KML/KMZ upload analysis router
-    │   │   ├── estimation.py               # Runoff volume & pond sizing router
-    │   │   ├── rainfall.py                 # Historical rainfall router
-    │   │   ├── report.py                   # PDF dossier generation router
-    │   │   └── villages.py                 # Village AOI initialization router
-    │   └── services/
-    │       ├── contour_ingest.py           # KML parsing & Delaunay DEM interpolation
-    │       ├── elevation.py                # Open-Elevation & synthetic DEM service
-    │       ├── rainfall.py                 # Open-Meteo & NASA POWER service
-    │       ├── report.py                   # Matplotlib PDF dossier builder
-    │       ├── runoff.py                   # SCS-CN & 3D Frustum sizing engine
-    │       ├── sites.py                    # Slope & depression candidate selector
-    │       └── terrain.py                  # D8 flow routing & watershed algorithms
-    ├── supabase/
-    │   └── schemas.sql                     # DDL Schema script
-    └── tests/
-        ├── conftest.py                     # FakeSupabase fixture for offline testing
-        ├── test_contour_analysis.py        # Contour parser & analysis unit tests
-        ├── test_db_mocking_regression.py   # DB mocking regression test
-        ├── test_runoff.py                  # SCS-CN & Frustum unit test suite
-        └── fixtures/
-            └── contours_1m.kml             # 1-meter contour map fixture
-\end{verbatim}
-
 \section{API Specification}
 
 \begin{table}[h!]
 \centering
 \small
-\caption{REST API Endpoints}
+\caption{Complete REST API Endpoints}
 \begin{tabular}{@{}lllp{6cm}@{}}
 \toprule
 \textbf{Method} & \textbf{Endpoint} & \textbf{Tag} & \textbf{Description} \\ \midrule
 \texttt{GET} & \texttt{/} & Core & Health check and API documentation root. \\
+\texttt{GET} & \texttt{/docs} & Core & Interactive Swagger OpenAPI UI. \\ \midrule
+\texttt{GET} & \texttt{/api/elevation/point} & Elevation & Independent elevation query by lat/lon. \\
+\texttt{POST} & \texttt{/api/elevation/dem} & Elevation & Independent 100x100 DEM grid by bounding box. \\ \midrule
+\texttt{GET} & \texttt{/api/rainfall/query} & Rainfall & Independent rainfall history by lat/lon. \\
+\texttt{POST} & \texttt{/api/rainfall/bbox} & Rainfall & Independent rainfall history by bounding box. \\ \midrule
+\texttt{POST} & \texttt{/api/contour/extract-polylines} & Contour & Extracts contour lines, interval, and elevation. \\
+\texttt{POST} & \texttt{/api/contour/dem-from-kml} & Contour & Interpolates Delaunay DEM raster from KML. \\
+\texttt{POST} & \texttt{/api/contour/analyzeContour} & Contour & End-to-end KML/KMZ upload analysis. \\
+\texttt{POST} & \texttt{/api/contour/findCatchment} & Contour & Alias for \texttt{/analyzeContour}. \\ \midrule
 \texttt{POST} & \texttt{/api/villages/\{v\}/init} & Villages & Bootstraps AOI, DEM, slopes, and sites. \\
 \texttt{GET} & \texttt{/api/villages/\{v\}/imagery} & Villages & Map tile overlay configuration. \\
 \texttt{GET} & \texttt{/api/villages/\{v\}/contours} & Villages & Elevation contour GeoJSON extraction. \\
-\texttt{GET} & \texttt{/api/villages/\{v\}/rainfall} & Rainfall & 10-year monthly precipitation metrics. \\
+\texttt{GET} & \texttt{/api/villages/\{v\}/rainfall} & Villages & 10-year monthly precipitation metrics. \\
 \texttt{GET} & \texttt{/api/villages/\{v\}/candidates} & Villages & Lists top candidate excavation sites. \\
 \texttt{POST} & \texttt{/.../candidates/\{id\}/catchment} & Catchment & D8 watershed delineation and area. \\
 \texttt{POST} & \texttt{/.../candidates/\{id\}/estimate} & Estimation & SCS-CN runoff volume and 3D frustum sizing. \\
 \texttt{GET} & \texttt{/api/villages/\{v\}/recommendations} & Estimation & Ranked candidate pond recommendations. \\
-\texttt{GET} & \texttt{/.../candidates/\{id\}/report} & Report & Generates engineering PDF dossier. \\
-\texttt{POST} & \texttt{/api/contour/analyzeContour} & Contour & End-to-end KML/KMZ upload analysis. \\
-\texttt{POST} & \texttt{/api/contour/findCatchment} & Contour & Alias for \texttt{/analyzeContour}. \\ \bottomrule
+\texttt{GET} & \texttt{/.../candidates/\{id\}/report} & Report & Generates engineering PDF dossier. \\ \bottomrule
 \end{tabular}
 \end{table}
 
 \section{Verification and Test Results}
 
-\subsection{Automated End-to-End API Test Suite (\texttt{test\_api.py})}
-All 11 API endpoints were verified sequentially against a live server instance:
-\begin{itemize}
-    \item \textbf{Step 1: Health Check}: \texttt{200 OK} ($\text{status: ok}$).
-    \item \textbf{Step 2: Village AOI Init}: \texttt{200 OK}, generated 5 candidates over synthetic/Open-Elevation DEM.
-    \item \textbf{Step 3: Imagery Config}: \texttt{200 OK}, configured Esri World Imagery tiles.
-    \item \textbf{Step 4: Contours}: \texttt{200 OK}, extracted contour GeoJSON at 3m interval.
-    \item \textbf{Step 5: Rainfall}: \texttt{200 OK}, fetched annual total and 12-month series.
-    \item \textbf{Step 6: Candidates}: \texttt{200 OK}, retrieved 5 spatially distributed sites.
-    \item \textbf{Step 7: Catchment}: \texttt{200 OK}, delineated contributing watershed basin ($3.64\text{ ha}$).
-    \item \textbf{Step 8: Sizing Estimate}: \texttt{200 OK}, calculated $14,942.2\text{ m}^3$ harvestable runoff and $3\text{m}$ depth.
-    \item \textbf{Step 9: Recommendations}: \texttt{200 OK}, computed composite rank scores and justifications.
-    \item \textbf{Step 10: PDF Dossier}: \texttt{200 OK}, downloaded formatted candidate PDF summary.
-    \item \textbf{Step 11: Contour Upload}: \texttt{200 OK}, parsed KML contour polylines and recommended top site.
-\end{itemize}
+\subsection{Live End-to-End Test Suite Execution (\texttt{test\_all\_apis\_live.py})}
+All 21 testing steps across independent services, contour ingestion, bounding-box flows, and error handling were verified against the live server:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Health Check \& Swagger Docs}: \texttt{200 OK}, API root and documentation active.
+    \item \textbf{Independent Elevation Point}: \texttt{200 OK} ($\text{lat: 21.25, lon: 81.30} \rightarrow \text{elevation: } 278.4\text{m}$).
+    \item \textbf{Independent DEM Bbox}: \texttt{200 OK} ($100 \times 100$ raster grid returned with $33.34\text{m}$ resolution).
+    \item \textbf{Independent Rainfall Query}: \texttt{200 OK} ($\text{annual: } 1150.4\text{mm}$, 12 monthly precipitation records).
+    \item \textbf{KML Polyline Extraction (\texttt{contours\_1m.kml})}: \texttt{200 OK}, extracted $1,355$ contour polylines, elevation range $[267.0\text{m}, 298.0\text{m}]$, estimated interval $1.0\text{m}$.
+    \item \textbf{KML Delaunay DEM Generation}: \texttt{200 OK}, interpolated $100 \times 100$ continuous DEM raster grid.
+    \item \textbf{End-to-End Contour Analysis (\texttt{/analyzeContour})}: \texttt{200 OK}, identified optimal depression site, delineated D8 watershed boundary ($4.12\text{ ha}$), and ranked candidate sites.
+    \item \textbf{Bounding-Box AOI Flow (\texttt{DemoVillage\_Live})}: \texttt{200 OK}, initialized 5 candidate sites, computed $332.51\text{ ha}$ watershed, calculated $2,688,697.1\text{ m}^3$ runoff, and sized 3D frustum pond ($54,187.6\text{ m}^3$ capacity, $4.0\text{m}$ depth, $15,000\text{ m}^2$ area, $1.5:1$ side slopes, $0.5\text{m}$ freeboard).
+    \item \textbf{PDF Engineering Dossier}: \texttt{200 OK}, downloaded formatted candidate engineering summary.
+    \item \textbf{Negative Testing}: \texttt{404 Not Found} for non-existent village; \texttt{400 Bad Request} for invalid file formats.
+\end{enumerate}
 
 \subsection{Pytest Unit Test Suite}
-The comprehensive unit test suite executed 29 tests across all service and router modules:
+The comprehensive unit test suite executed 29 tests across all service and router modules with $100\%$ pass rate:
 \begin{lstlisting}[language=bash]
 ============================= test session starts =============================
 platform win32 -- Python 3.13.9, pytest-9.1.1
@@ -266,11 +231,11 @@ tests/test_contour_analysis.py ...........                               [ 37%]
 tests/test_db_mocking_regression.py .                                    [ 41%]
 tests/test_runoff.py .................                                    [100%]
 
-======================= 29 passed, 1 warning in 16.72s ========================
+======================= 29 passed, 1 warning in 17.40s ========================
 \end{lstlisting}
 
 \section{Deployment Guide}
-The backend is packaged with Docker for cross-platform containerization.
+The backend is containerized with Docker and supports instant public HTTPS tunneling.
 
 \subsection{Container Deployment via Docker Compose}
 \begin{lstlisting}[language=bash]
@@ -282,7 +247,6 @@ docker compose logs -f
 \end{lstlisting}
 
 \subsection{Live Tunneling for Public Access}
-To expose the local/remote backend port 8000 via a live public HTTPS URL:
 \begin{lstlisting}[language=bash]
 # Instant Zero-Config SSH Tunnel
 ssh -R 80:localhost:8000 serveo.net

@@ -1,0 +1,560 @@
+{
+	"info": {
+		"_postman_id": "8f3b1c4e-2a9d-4e8b-b1a7-9f7e5d3c2b1a",
+		"name": "Village Pond Planning & Watershed Analysis API",
+		"description": "Complete Postman Test Collection covering Bounding-Box AOI Flow, Contour Map Upload Ingestion, Hydrological Sizing, and Error Validations.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "villageName",
+			"value": "DemoVillage",
+			"type": "string"
+		},
+		{
+			"key": "candidateId",
+			"value": "1",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Core & Discovery",
+			"item": [
+				{
+					"name": "Health Check (GET /)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Returns status ok', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.status).to.eql('ok');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/",
+							"host": ["{{baseUrl}}"],
+							"path": [""]
+						}
+					}
+				},
+				{
+					"name": "Swagger UI Docs (GET /docs)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/docs",
+							"host": ["{{baseUrl}}"],
+							"path": ["docs"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Bounding-Box Driven Flow",
+			"item": [
+				{
+					"name": "1. Init Village AOI",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Contains village_id and candidates count', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('village_id');",
+									"    pm.expect(json.candidate_count).to.be.at.least(1);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{villageName}}\",\n  \"bbox\": {\n    \"min_lat\": 21.235,\n    \"min_lon\": 81.285,\n    \"max_lat\": 21.265,\n    \"max_lon\": 81.315\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/init",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "init"]
+						}
+					}
+				},
+				{
+					"name": "2. Map Imagery Config",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Contains valid tile URL', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.tile_url).to.include('ArcGIS');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/imagery",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "imagery"]
+						}
+					}
+				},
+				{
+					"name": "3. Elevation Contours",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Returns GeoJSON FeatureCollection', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.geojson.type).to.eql('FeatureCollection');",
+									"    pm.expect(json.geojson.features.length).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/contours",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "contours"]
+						}
+					}
+				},
+				{
+					"name": "4. Historical Rainfall Summary",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Returns 12 monthly precipitation values', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.monthly_avg_mm).to.be.an('array').with.lengthOf(12);",
+									"    pm.expect(json.mean_annual_mm).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/rainfall?years=10",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "rainfall"],
+							"query": [
+								{
+									"key": "years",
+									"value": "10"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "5. List Candidate Sites",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Returns candidate sites with slope <= 6%', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.candidates.length).to.be.above(0);",
+									"    json.candidates.forEach(function(c) {",
+									"        pm.expect(c.slope_pct).to.be.at.most(6.0);",
+									"        pm.expect(c.suitability_score).to.be.within(0.0, 1.0);",
+									"    });",
+									"    pm.collectionVariables.set('candidateId', json.candidates[0].id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/candidates",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "candidates"]
+						}
+					}
+				},
+				{
+					"name": "6. Catchment Delineation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Calculates positive catchment area', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.area_ha).to.be.above(0);",
+									"    pm.expect(json.geojson.type).to.eql('Feature');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/candidates/{{candidateId}}/catchment",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "candidates", "{{candidateId}}", "catchment"]
+						}
+					}
+				},
+				{
+					"name": "7. Estimate Runoff & Frustum Sizing",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Validates 3D Frustum Geometry & Bounds', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.recommended_depth_m).to.be.within(1.5, 4.0);",
+									"    pm.expect(json.storage_capacity_m3).to.be.above(0);",
+									"    pm.expect(json.top_length_m).to.be.above(json.bottom_length_m);",
+									"    pm.expect(json.top_width_m).to.be.above(json.bottom_width_m);",
+									"    pm.expect(json.side_slope_ratio).to.eql(1.5);",
+									"    pm.expect(json.freeboard_m).to.eql(0.5);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/candidates/{{candidateId}}/estimate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "candidates", "{{candidateId}}", "estimate"]
+						}
+					}
+				},
+				{
+					"name": "8. Get Ranked Recommendations",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Recommendations are sorted descending by rank_score', function () {",
+									"    var json = pm.response.json();",
+									"    var recs = json.recommendations;",
+									"    pm.expect(recs.length).to.be.above(0);",
+									"    for (var i = 0; i < recs.length - 1; i++) {",
+									"        pm.expect(recs[i].rank_score).to.be.at.least(recs[i+1].rank_score);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/recommendations",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "recommendations"]
+						}
+					}
+				},
+				{
+					"name": "9. Download Candidate PDF Report",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Content-Type is application/pdf', function () {",
+									"    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/candidates/{{candidateId}}/report",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "candidates", "{{candidateId}}", "report"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Contour Map Upload Flow",
+			"item": [
+				{
+					"name": "1. Analyze Contour Map (/analyzeContour)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Returns input summary and recommended site', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('input_summary');",
+									"    pm.expect(json).to.have.property('derived_terrain');",
+									"    pm.expect(json).to.have.property('recommended_site');",
+									"    pm.expect(json.recommended_site.catchment.area_ha).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "tests/fixtures/contours_1m.kml"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contour/analyzeContour",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "contour", "analyzeContour"]
+						}
+					}
+				},
+				{
+					"name": "2. Find Catchment Route Alias (/findCatchment)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Produces same structure as analyzeContour', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('recommended_site');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "tests/fixtures/contours_1m.kml"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contour/findCatchment",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "contour", "findCatchment"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Error & Edge Case Validations",
+			"item": [
+				{
+					"name": "1. Non-Existent Village (404 Expected)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/NonExistentVillageXYZ/candidates",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "NonExistentVillageXYZ", "candidates"]
+						}
+					}
+				},
+				{
+					"name": "2. Invalid Candidate ID (404 Expected)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/villages/{{villageName}}/candidates/999999/catchment",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "villages", "{{villageName}}", "candidates", "999999", "catchment"]
+						}
+					}
+				},
+				{
+					"name": "3. Wrong File Extension Upload (400 Expected)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "text",
+									"value": "invalid text content"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/contour/analyzeContour",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "contour", "analyzeContour"]
+						}
+					}
+				}
+			]
+		}
+	]
+}

@@ -1,16 +1,8 @@
 """
-POST /analyzeContour (alias: /findCatchment)
+Contour Analysis & Ingestion API Router.
 
-Accepts an uploaded KML/KMZ contour map, derives a DEM purely from its
-contents (see services/contour_ingest.py), then reuses the existing
-terrain/site-suitability/catchment machinery (services/terrain.py,
-services/sites.py) — built for the bbox-driven flow — unchanged. This
-route is the only new piece; everything downstream of "here's a DEM
-grid" was already generalized and didn't need touching.
-
-Nothing in this route is specific to any one uploaded file: bbox,
-resolution, candidate locations, and catchment boundaries are all
-computed from whatever contour file is posted.
+Provides end-to-end watershed analysis from uploaded KML/KMZ contour files,
+as well as modular endpoints for polyline extraction and Delaunay DEM grid generation.
 """
 from __future__ import annotations
 
@@ -22,6 +14,63 @@ from app.services import contour_ingest, terrain, sites as sites_service
 router = APIRouter(prefix="/api/contour", tags=["contour-analysis"])
 
 ALLOWED_EXTENSIONS = (".kml", ".kmz")
+
+
+def _check_upload(file: UploadFile) -> None:
+    if not file.filename.lower().endswith(ALLOWED_EXTENSIONS):
+        raise HTTPException(400, f"Unsupported file type. Expected one of: {ALLOWED_EXTENSIONS}")
+
+
+@router.post("/extract-polylines")
+async def extract_polylines(file: UploadFile = File(...)):
+    """Extract raw contour polylines, elevations, and intervals from KML/KMZ."""
+    _check_upload(file)
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(400, "Uploaded file is empty")
+
+    try:
+        contours = contour_ingest.parse_contour_file(file_bytes, file.filename)
+    except contour_ingest.ContourParseError as e:
+        raise HTTPException(400, f"Could not parse contour file: {e}")
+
+    elevations = sorted(set(c["elevation_m"] for c in contours))
+    intervals = np.diff(elevations) if len(elevations) > 1 else [0.0]
+    estimated_interval = float(np.median(intervals)) if len(intervals) > 0 else 0.0
+
+    return {
+        "filename": file.filename,
+        "total_contour_lines": len(contours),
+        "elevation_min_m": min(elevations) if elevations else 0.0,
+        "elevation_max_m": max(elevations) if elevations else 0.0,
+        "estimated_interval_m": round(estimated_interval, 2),
+        "unique_elevation_levels_count": len(elevations),
+    }
+
+
+@router.post("/dem-from-kml")
+async def dem_from_kml(file: UploadFile = File(...)):
+    """Interpolate a 100x100 DEM raster grid directly from KML/KMZ contour polylines."""
+    _check_upload(file)
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(400, "Uploaded file is empty")
+
+    try:
+        contours = contour_ingest.parse_contour_file(file_bytes, file.filename)
+        dem_result = contour_ingest.build_dem_from_contours(contours)
+    except contour_ingest.ContourParseError as e:
+        raise HTTPException(400, f"Could not interpolate DEM from contours: {e}")
+
+    return {
+        "filename": file.filename,
+        "bbox": dem_result["bbox"],
+        "grid_size": [dem_result["rows"], dem_result["cols"]],
+        "resolution_m": round(dem_result["resolution_m"], 2),
+        "elevation_range_m": dem_result["elevation_range_m"],
+        "contour_count": dem_result["contour_count"],
+        "elevation": dem_result["elevation"].tolist(),
+    }
 
 
 def _run_analysis(file_bytes: bytes, filename: str) -> dict:
@@ -45,10 +94,6 @@ def _run_analysis(file_bytes: bytes, filename: str) -> dict:
             f"slope threshold ({sites_service.MAX_SUITABLE_SLOPE_PCT}%). The terrain may be too steep.",
         )
 
-    # D8 flow-direction only depends on the DEM, not on which candidate
-    # we're checking — compute it once, reuse for every candidate's
-    # catchment (same caching principle as routers/catchment.py's
-    # per-village reuse in the bbox-driven flow).
     direction = terrain.d8_flow_direction(dem)
 
     analyzed_candidates = []
@@ -85,12 +130,6 @@ def _run_analysis(file_bytes: bytes, filename: str) -> dict:
             }
         )
 
-    # Recommend by a composite of catchment yield and site suitability, not
-    # suitability alone — a perfectly flat site with almost no upstream
-    # drainage area is a poor pond location even though it scores well on
-    # slope. This mirrors the same storage-weighted principle used by
-    # runoff.py's rank_candidates() for the bbox-driven flow, adapted here
-    # since this route has no rainfall data to compute actual runoff volume.
     max_area = max((c["catchment"]["area_ha"] for c in analyzed_candidates), default=0) or 1.0
     for c in analyzed_candidates:
         normalized_area = c["catchment"]["area_ha"] / max_area
@@ -118,21 +157,17 @@ def _run_analysis(file_bytes: bytes, filename: str) -> dict:
             "interpolation with nearest-neighbor fill outside the convex hull. "
             "Candidate sites selected by slope threshold + minimum spacing "
             "(services/sites.py). Catchment delineated via D8 flow-direction "
-            "and reverse-BFS from each candidate (services/terrain.py) — "
-            "identical algorithm used by the bbox-driven /init pipeline. "
+            "and reverse-BFS from each candidate (services/terrain.py). "
             "Final recommendation ranks candidates by a composite of "
-            "normalized catchment area (60%) and site suitability (40%), "
-            "since catchment yield matters more than slope alone for a "
-            "usable pond site."
+            "normalized catchment area (60%) and site suitability (40%)."
         ),
     }
 
 
 @router.post("/analyzeContour")
 async def analyze_contour(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith(ALLOWED_EXTENSIONS):
-        raise HTTPException(400, f"Unsupported file type. Expected one of: {ALLOWED_EXTENSIONS}")
-
+    """End-to-end KML/KMZ upload analysis: DEM generation, slope calculation, candidate selection, D8 catchment delineation."""
+    _check_upload(file)
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(400, "Uploaded file is empty")
@@ -142,6 +177,5 @@ async def analyze_contour(file: UploadFile = File(...)):
 
 @router.post("/findCatchment")
 async def find_catchment(file: UploadFile = File(...)):
-    """Alias of /analyzeContour — same behavior, offered under the PS's
-    alternate suggested route name."""
+    """Alias for /analyzeContour."""
     return await analyze_contour(file)

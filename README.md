@@ -95,56 +95,48 @@ pond_planner/
 
 ## 🌐 API Reference Table
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/` | Health check & API documentation link |
-| `POST` | `/api/villages/{village}/init` | Initializes AOI, fetches DEM, calculates slopes, and selects candidate sites |
-| `GET` | `/api/villages/{village}/imagery` | Returns Esri World Imagery map tile configuration |
-| `GET` | `/api/villages/{village}/contours` | Extracts 3-meter interval elevation contours as GeoJSON |
-| `GET` | `/api/villages/{village}/rainfall` | Retrieves 10-year monthly precipitation averages |
-| `GET` | `/api/villages/{village}/candidates` | Lists candidate excavation sites with slopes and suitability |
-| `POST` | `/api/villages/{village}/candidates/{id}/catchment` | Delineates the contributing watershed basin using D8 flow routing |
-| `POST` | `/api/villages/{village}/candidates/{id}/estimate` | Calculates harvestable runoff and recommends 3D trapezoidal pond sizing |
-| `GET` | `/api/villages/{village}/recommendations` | Returns composite-ranked candidate site recommendations |
-| `GET` | `/api/villages/{village}/candidates/{id}/report` | Downloads a comprehensive candidate engineering PDF dossier |
-| `POST` | `/api/contour/analyzeContour` | Ingests `.kml` / `.kmz` contour map and performs end-to-end siting |
-| `POST` | `/api/contour/findCatchment` | Alias for `/api/contour/analyzeContour` |
+| Method | Endpoint | Tag | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Core | Health check & API documentation link |
+| `GET` | `/docs` | Core | Interactive Swagger OpenAPI documentation |
+| `GET` | `/api/elevation/point` | Elevation | Independent elevation query by lat/lon coordinates |
+| `POST` | `/api/elevation/dem` | Elevation | Independent 100x100 DEM raster grid query for any bounding box |
+| `GET` | `/api/rainfall/query` | Rainfall | Independent 10-year monthly precipitation query by lat/lon |
+| `POST` | `/api/rainfall/bbox` | Rainfall | Independent historical rainfall query for bounding box center |
+| `POST` | `/api/contour/extract-polylines` | Contour | Extracts contour line count, min/max elevations, and interval |
+| `POST` | `/api/contour/dem-from-kml` | Contour | Generates interpolated Delaunay DEM grid directly from KML/KMZ |
+| `POST` | `/api/contour/analyzeContour` | Contour | Ingests `.kml` / `.kmz` contour map and performs end-to-end siting |
+| `POST` | `/api/contour/findCatchment` | Contour | Alias for `/api/contour/analyzeContour` |
+| `POST` | `/api/villages/{village}/init` | Villages | Initializes AOI, fetches DEM, calculates slopes, and selects candidate sites |
+| `GET` | `/api/villages/{village}/imagery` | Villages | Returns Esri World Imagery map tile configuration |
+| `GET` | `/api/villages/{village}/contours` | Villages | Extracts 3-meter interval elevation contours as GeoJSON |
+| `GET` | `/api/villages/{village}/rainfall` | Villages | Retrieves 10-year monthly precipitation averages for village |
+| `GET` | `/api/villages/{village}/candidates` | Villages | Lists candidate excavation sites with slopes and suitability |
+| `POST` | `/api/villages/{village}/candidates/{id}/catchment` | Catchment | Delineates contributing watershed basin using D8 flow routing |
+| `POST` | `/api/villages/{village}/candidates/{id}/estimate` | Estimation | Calculates harvestable runoff and recommends 3D trapezoidal pond sizing |
+| `GET` | `/api/villages/{village}/recommendations` | Estimation | Returns composite-ranked candidate site recommendations |
+| `GET` | `/api/villages/{village}/candidates/{id}/report` | Report | Downloads comprehensive candidate engineering PDF dossier |
 
 ---
 
 ## 🚀 Quickstart Guide
 
-### 1. Installation & Environment Setup
+### 1. Start the Backend Server
 
 ```powershell
 cd backend
-
-# Create & activate virtual environment (if not already done)
-python -m venv venv
-.\venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Configure Supabase Credentials
-
-1. Copy `.env.example` to `.env`:
-   ```powershell
-   cp .env.example .env
-   ```
-2. Populate `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in `.env`.
-3. Open the **SQL Editor** in your Supabase project dashboard, paste the contents of `supabase/schemas.sql`, and click **Run**.
-
-### 3. Start the Backend Server
-
-```powershell
 .\venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
-* **Swagger UI Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* **Interactive Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 4. Run Automated End-to-End Tests
+### 2. Run Complete Live API Test Suite (All 21 Steps)
 
 ```powershell
-.\venv\Scripts\python test_api.py
+.\venv\Scripts\python test_all_apis_live.py
+```
+
+### 3. Run Pytest Suite (All 29 Unit Tests)
+
+```powershell
+.\venv\Scripts\python -m pytest tests/ -v
 ```
