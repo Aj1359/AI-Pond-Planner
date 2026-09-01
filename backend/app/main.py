@@ -65,6 +65,6 @@ app.include_router(report.router)
 app.include_router(contour.router)
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"status": "ok", "docs": "/docs"}

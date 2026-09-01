@@ -2,6 +2,14 @@
 
 An intelligent geospatial and hydrological planning system designed to identify optimal earthen pond excavation locations, delineate contributing catchment basins, estimate harvestable monsoon runoff, and calculate optimal 3D pond dimensions.
 
+[![Live API](https://img.shields.io/badge/Live%20API-Online-success?style=for-the-badge&logo=render)](https://ai-pond-planner-1.onrender.com)
+[![Swagger Docs](https://img.shields.io/badge/Swagger%20UI-Interactive%20Docs-blue?style=for-the-badge&logo=swagger)](https://ai-pond-planner-1.onrender.com/docs)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/Aj1359/AI-Pond-Planner)
+
+* **Live Base URL**: [https://ai-pond-planner-1.onrender.com](https://ai-pond-planner-1.onrender.com)
+* **Interactive Swagger Documentation**: [https://ai-pond-planner-1.onrender.com/docs](https://ai-pond-planner-1.onrender.com/docs)
+* **GitHub Repository**: [https://github.com/Aj1359/AI-Pond-Planner](https://github.com/Aj1359/AI-Pond-Planner)
+
 ---
 
 ## 🌟 Key Capabilities

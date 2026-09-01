@@ -42,7 +42,10 @@
 \rfoot{Page \thepage}
 
 \title{\textbf{AI-Assisted Village Pond Planning and Watershed Analysis System} \\ \large Technical Architecture, Hydrological Formulations, and API Verification Report}
-\author{\textbf{Development \& Engineering Team} \\ GitHub Repository: \url{https://github.com/Aj1359/AI-Pond-Planner.git}}
+\author{\textbf{Development \& Engineering Team} \\ 
+\textbf{GitHub Repository:} \url{https://github.com/Aj1359/AI-Pond-Planner.git} \\
+\textbf{Live API Server:} \url{https://ai-pond-planner-1.onrender.com} \\
+\textbf{Interactive Swagger UI:} \url{https://ai-pond-planner-1.onrender.com/docs}}
 \date{\today}
 
 \begin{document}
@@ -50,18 +53,19 @@
 \maketitle
 
 \begin{abstract}
-Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System}. The backend incorporates independent microservices for elevation and precipitation analysis alongside automated Area of Interest (AOI) bounding-box workflows and single-step KML/KMZ contour map upload analysis. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. Automated end-to-end integration tests (21 live steps) and comprehensive pytest unit suites (29/29 tests) achieve 100\% pass rates.
+Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System}. The backend incorporates independent microservices for elevation and precipitation analysis alongside automated Area of Interest (AOI) bounding-box workflows and single-step KML/KMZ contour map upload analysis. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. The application is deployed live on cloud infrastructure (\url{https://ai-pond-planner-1.onrender.com}) with 100\% test coverage across all 29 automated test cases.
 \end{abstract}
 
 \tableofcontents
 \newpage
 
-\section{Introduction and Objectives}
+\section{Introduction and Project Overview}
 Rural water security relies heavily on community and farm ponds that collect seasonal monsoon runoff for dry-season irrigation, groundwater recharge, and livestock use. Traditional site selection often relies on informal visual inspection without rigorous topographic or hydrological assessment, leading to siltation, inadequate water yield, or structural failure.
 
 The \textbf{AI-based Village Pond Planning System} automates the engineering pipeline:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Independent Geospatial \& Climate Services}: Provides stand-alone API access to Digital Elevation Model (DEM) grids, point elevations, and 10-year monthly precipitation metrics.
+    \item \textbf{Public Cloud Deployment}: Live production server available at \url{https://ai-pond-planner-1.onrender.com}.
+    \item \textbf{Independent Geospatial \& Climate Services}: Stand-alone API access to Digital Elevation Model (DEM) grids, point elevations, and 10-year monthly precipitation metrics.
     \item \textbf{Upload-Driven Contour Ingestion}: Parses raw KML/KMZ contour polyline datasets, computes Delaunay triangulation DEMs, and derives topographic layers.
     \item \textbf{Terrain \& Slope Filtering}: Evaluates spatial gradients to identify natural depression sites with slopes $\le 6\%$.
     \item \textbf{Hydrological Delineation}: Resolves D8 flow directions to delineate exact contributing catchment basins.
@@ -234,26 +238,14 @@ tests/test_runoff.py .................                                    [100%]
 ======================= 29 passed, 1 warning in 17.40s ========================
 \end{lstlisting}
 
-\section{Deployment Guide}
-The backend is containerized with Docker and supports instant public HTTPS tunneling.
-
-\subsection{Container Deployment via Docker Compose}
-\begin{lstlisting}[language=bash]
-# Build and start container in detached mode
-docker compose up -d --build
-
-# View runtime logs
-docker compose logs -f
-\end{lstlisting}
-
-\subsection{Live Tunneling for Public Access}
-\begin{lstlisting}[language=bash]
-# Instant Zero-Config SSH Tunnel
-ssh -R 80:localhost:8000 serveo.net
-
-# Cloudflare Quick Tunnel
-cloudflared tunnel --url http://localhost:8000
-\end{lstlisting}
+\section{Live Production Deployment}
+The backend application is deployed live on cloud container infrastructure:
+\begin{itemize}
+    \item \textbf{Live Base URL}: \url{https://ai-pond-planner-1.onrender.com}
+    \item \textbf{Interactive Swagger UI}: \url{https://ai-pond-planner-1.onrender.com/docs}
+    \item \textbf{GitHub Repository}: \url{https://github.com/Aj1359/AI-Pond-Planner.git}
+    \item \textbf{Postman Collection}: Stored in \texttt{postman/Village\_Pond\_Planning.postman\_collection.json}
+\end{itemize}
 
 \section{Conclusion}
 The \textbf{AI-based Village Pond Planning System} provides a scientific, scalable, and mathematically rigorous platform for rural water harvesting. By combining geospatial interpolation, D8 watershed routing, USDA SCS-CN hydrological modeling, and 3D trapezoidal frustum geometry, the system delivers actionable pond excavation blueprints with verified $100\%$ test coverage.
