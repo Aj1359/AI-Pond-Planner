@@ -9,11 +9,15 @@ Supports all standard and legacy endpoint paths:
 - /api/v1/analyzeContour
 - /api/contour/analyzeContour
 - /api/contour/findCatchment
+
+Includes clean tabular summaries and optional HTML visual table rendering for browsers.
 """
 from __future__ import annotations
 
+import json
 import numpy as np
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import contour_ingest, terrain, sites as sites_service
 
@@ -27,13 +31,11 @@ async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None
     Robustly extracts uploaded file bytes and filename across any form field key
     (e.g., 'file', 'contour_file', 'upload_file') or raw body.
     """
-    # 1. Direct FastAPI UploadFile parameter
     if file is not None and getattr(file, "filename", None):
         content = await file.read()
         if content:
             return content, file.filename
 
-    # 2. Inspect request form data for any file field
     try:
         form = await request.form()
         for key, val in form.items():
@@ -44,7 +46,6 @@ async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None
     except Exception:
         pass
 
-    # 3. Inspect raw request body (e.g. direct raw KML payload)
     try:
         body = await request.body()
         if body and (b"<kml" in body or b"PK\x03\x04" in body or b"<?xml" in body or b"coordinates" in body):
@@ -123,6 +124,21 @@ def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> 
     analyzed_candidates.sort(key=lambda c: c["recommendation_score"], reverse=True)
     recommended = analyzed_candidates[0]
 
+    # Build clean tabular summary list for easy display in tables or dashboards
+    table_rows = []
+    for rank, site in enumerate(analyzed_candidates, start=1):
+        table_rows.append({
+            "rank": rank,
+            "status": "RECOMMENDED" if rank == 1 else f"Alternative #{rank-1}",
+            "latitude": site["location"]["lat"],
+            "longitude": site["location"]["lon"],
+            "slope_pct": site["slope_pct"],
+            "land_type": site["land_type"],
+            "catchment_area_ha": site["catchment"]["area_ha"],
+            "suitability_score": site["suitability_score"],
+            "recommendation_score": site["recommendation_score"]
+        })
+
     return {
         "input_summary": {
             "filename": filename,
@@ -135,6 +151,7 @@ def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> 
             "grid_size": [dem_result["rows"], dem_result["cols"]],
             "resolution_m": round(cell_size_m, 2),
         },
+        "summary_table": table_rows,
         "recommended_site": recommended,
         "alternative_sites": analyzed_candidates[1:],
         "methodology": (
@@ -149,15 +166,127 @@ def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> 
     }
 
 
-# Route handler that accepts all alias paths and query parameters
+def _render_html_dashboard(data: dict) -> str:
+    """Renders a modern, responsive HTML dashboard table for browser views."""
+    input_s = data["input_summary"]
+    terrain_s = data["derived_terrain"]
+    rec = data["recommended_site"]
+    table_rows = data.get("summary_table", [])
+
+    rows_html = ""
+    for r in table_rows:
+        badge_cls = "bg-green-100 text-green-800 border-green-300" if r["rank"] == 1 else "bg-gray-100 text-gray-700 border-gray-200"
+        rows_html += f"""
+        <tr class="hover:bg-blue-50/50 transition">
+            <td class="px-4 py-3 font-semibold text-center"><span class="inline-block px-2 py-0.5 text-xs font-bold rounded-full border {badge_cls}">#{r['rank']} {r['status']}</span></td>
+            <td class="px-4 py-3 font-mono text-xs">{r['latitude']:.5f}, {r['longitude']:.5f}</td>
+            <td class="px-4 py-3 text-center">{r['slope_pct']}%</td>
+            <td class="px-4 py-3 capitalize">{r['land_type'].replace('_', ' ')}</td>
+            <td class="px-4 py-3 text-right font-semibold text-blue-600">{r['catchment_area_ha']:.2f} ha</td>
+            <td class="px-4 py-3 text-right">{r['suitability_score']:.3f}</td>
+            <td class="px-4 py-3 text-right font-bold text-emerald-600">{r['recommendation_score']:.3f}</td>
+        </tr>
+        """
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Village Pond Siting Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>body {{ font-family: 'Inter', sans-serif; }}</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen p-6">
+    <div class="max-w-6xl mx-auto space-y-6">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl p-6 shadow-lg flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold">AI-Assisted Village Pond Siting Report</h1>
+                <p class="text-blue-100 text-sm mt-1">Delaunay Interpolation | D8 Watershed Routing | Multi-Criteria Siting</p>
+            </div>
+            <div class="text-right">
+                <span class="inline-block bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow">Phase 1 Complete</span>
+                <p class="text-xs text-blue-200 mt-1">File: {input_s['filename']}</p>
+            </div>
+        </header>
+
+        <!-- Stats Overview Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-xs font-semibold text-slate-400 uppercase">Contour Lines</p>
+                <p class="text-2xl font-bold text-slate-800 mt-1">{input_s['contour_line_count']:,}</p>
+                <p class="text-xs text-slate-500 mt-1">Interval: {input_s['contour_interval_m']}m</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-xs font-semibold text-slate-400 uppercase">Elevation Range</p>
+                <p class="text-2xl font-bold text-indigo-600 mt-1">{input_s['elevation_range_m'][0]}m - {input_s['elevation_range_m'][1]}m</p>
+                <p class="text-xs text-slate-500 mt-1">Span: {input_s['elevation_range_m'][1] - input_s['elevation_range_m'][0]}m</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <p class="text-xs font-semibold text-slate-400 uppercase">DEM Grid Resolution</p>
+                <p class="text-2xl font-bold text-slate-800 mt-1">{terrain_s['resolution_m']}m / cell</p>
+                <p class="text-xs text-slate-500 mt-1">Shape: {terrain_s['grid_size'][0]}x{terrain_s['grid_size'][1]}</p>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-5 rounded-xl shadow-md">
+                <p class="text-xs font-semibold text-emerald-100 uppercase">Top Site Catchment</p>
+                <p class="text-2xl font-bold mt-1">{rec['catchment']['area_ha']} ha</p>
+                <p class="text-xs text-emerald-100 mt-1">Score: {rec['recommendation_score']:.3f} / 1.0</p>
+            </div>
+        </div>
+
+        <!-- Siting Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                <h2 class="font-bold text-slate-800">Evaluated Candidate Pond Locations (Ranked)</h2>
+                <span class="text-xs text-slate-500 font-medium">Sorted by composite recommendation utility</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-100/70 text-slate-600 text-xs font-semibold uppercase tracking-wider">
+                        <tr>
+                            <th class="px-4 py-3 text-center">Rank</th>
+                            <th class="px-4 py-3">Coordinates (Lat, Lon)</th>
+                            <th class="px-4 py-3 text-center">Slope</th>
+                            <th class="px-4 py-3">Land Cover</th>
+                            <th class="px-4 py-3 text-right">Contributing Basin</th>
+                            <th class="px-4 py-3 text-right">Suitability</th>
+                            <th class="px-4 py-3 text-right">Utility Score</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Methodology Footer -->
+        <div class="bg-slate-100 rounded-xl p-4 text-xs text-slate-600 leading-relaxed border border-slate-200">
+            <span class="font-bold text-slate-700">Methodology:</span> {data['methodology']}
+        </div>
+    </div>
+</body>
+</html>"""
+
+
+# Route handler that accepts all alias paths, formats, and query parameters
 async def _handle_contour_analysis_request(
     request: Request,
     file: UploadFile = File(None),
     num_candidates: int = Query(5),
     resolution: float = Query(None),
+    format: str = Query("json"),
 ):
     file_bytes, filename = await _extract_file_bytes_and_name(request, file)
-    return _run_analysis(file_bytes, filename, num_candidates=num_candidates)
+    result = _run_analysis(file_bytes, filename, num_candidates=num_candidates)
+
+    accept_header = request.headers.get("Accept", "")
+    if format == "html" or ("text/html" in accept_header and "application/json" not in accept_header):
+        return HTMLResponse(_render_html_dashboard(result))
+
+    return JSONResponse(result)
 
 
 # Register all standard and alias routes
@@ -170,7 +299,7 @@ for path in [
     "/api/contour/analyzeContour",
     "/api/contour/findCatchment",
 ]:
-    router.add_api_route(path, _handle_contour_analysis_request, methods=["POST"])
+    router.add_api_route(path, _handle_contour_analysis_request, methods=["POST", "GET"])
 
 
 @router.post("/api/contour/extract-polylines")
