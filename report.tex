@@ -47,9 +47,9 @@
 \title{\textbf{AI-Assisted Village Pond Planning and Watershed Analysis System} \\ \large Phase 1: Backend Submission --- Technical Architecture \& API Verification Report}
 \author{\textbf{Aditya Jha} \\ 
 \textbf{Student ID:} 12340090 \\
-\textbf{System Allotment:} \texttt{stu5\_sys2} (\texttt{10.1.75.51:3218}) \\[0.2cm]
-\textbf{Evaluation API Route:} \url{http://10.1.75.51:3218/analyzeContour} \\
-\textbf{Interactive Swagger UI:} \url{http://10.1.75.51:3218/docs} \\
+\textbf{System Allotment:} \texttt{stu5\_sys2} (\texttt{10.1.75.51:4218}) \\[0.2cm]
+\textbf{Evaluation API Route:} \url{http://10.1.75.51:4218/analyzeContour} \\
+\textbf{Interactive Swagger UI:} \url{http://10.1.75.51:4218/docs} \\
 \textbf{Cloud Mirror:} \url{https://ai-pond-planner-1.onrender.com} \\
 \textbf{GitHub Repository:} \url{https://github.com/Aj1359/AI-Pond-Planner.git}}
 \date{\today}
@@ -59,7 +59,7 @@
 \maketitle
 
 \begin{abstract}
-Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System} for the Phase 1 Backend Submission. The backend incorporates single-step KML/KMZ contour map upload analysis under the required \texttt{contour\_map} parameter alongside independent microservices for elevation and precipitation analysis and automated Area of Interest (AOI) bounding-box workflows. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. The application is hosted live on the allotted lab cluster (\url{http://10.1.75.51:3218/analyzeContour}) with 100\% test coverage across all automated test suites.
+Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System} for the Phase 1 Backend Submission. The backend incorporates single-step KML/KMZ contour map upload analysis under the required \texttt{contour\_map} parameter alongside independent microservices for elevation and precipitation analysis and automated Area of Interest (AOI) bounding-box workflows. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. The application is hosted live on the allotted lab cluster (\url{http://10.1.75.51:4218/analyzeContour}) with 100\% test coverage across all automated test suites.
 \end{abstract}
 
 \tableofcontents
@@ -70,7 +70,7 @@ Rural water security relies heavily on community and farm ponds that collect sea
 
 The \textbf{AI-based Village Pond Planning System} automates the engineering pipeline:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Allotted Lab Deployment}: Live production server running on assigned system \texttt{stu5\_sys2} at \url{http://10.1.75.51:3218/analyzeContour}.
+    \item \textbf{Allotted Lab Deployment}: Live production server running on assigned system \texttt{stu5\_sys2} at \url{http://10.1.75.51:4218/analyzeContour}.
     \item \textbf{Upload-Driven Contour Ingestion}: Accepts uploaded KML/KMZ contour maps under variable name \texttt{contour\_map} (and \texttt{file}), parses raw contour polylines, and computes continuous Delaunay triangulation DEMs.
     \item \textbf{Terrain \& Slope Filtering}: Evaluates spatial gradients to identify natural depression sites with slopes $\le 6\%$.
     \item \textbf{Hydrological Delineation}: Resolves D8 flow directions to delineate exact contributing catchment basins and extract GeoJSON boundaries.
@@ -196,7 +196,7 @@ The backend is built with FastAPI and modular geospatial services. Relational pe
 \section{Verification and Demonstration Results}
 
 \subsection{Live KML Contour Verification (\texttt{contours\_1m.kml})}
-Testing the live endpoint on \texttt{stu5\_sys2} (\texttt{10.1.75.51:3218/analyzeContour}) with the provided fixture yielded:
+Testing the live endpoint on \texttt{stu5\_sys2} (\texttt{10.1.75.51:4218/analyzeContour}) with the provided fixture yielded:
 \begin{itemize}
     \item \textbf{Status}: \texttt{200 OK} (Execution time: 1.84s).
     \item \textbf{Input Parsing}: 1,355 contour lines parsed across elevation span $[267.0\text{m}, 298.0\text{m}]$ with $1.0\text{m}$ interval.
@@ -239,9 +239,9 @@ tests/test_runoff.py .................                                    [100%]
 \section{Live Deployment and Submission Summary}
 \begin{itemize}
     \item \textbf{Assigned Lab System}: \texttt{stu5\_sys2} on gateway \texttt{10.1.75.51} (SSH Port: \texttt{2218})
-    \item \textbf{Working API Route URL}: \url{http://10.1.75.51:3218/analyzeContour}
+    \item \textbf{Working API Route URL}: \url{http://10.1.75.51:4218/analyzeContour}
     \item \textbf{Accepted Form Variable}: \texttt{contour\_map} (with \texttt{file} fallback)
-    \item \textbf{Interactive Swagger UI}: \url{http://10.1.75.51:3218/docs}
+    \item \textbf{Interactive Swagger UI}: \url{http://10.1.75.51:4218/docs}
     \item \textbf{Cloud Mirror URL}: \url{https://ai-pond-planner-1.onrender.com}
     \item \textbf{GitHub Repository}: \url{https://github.com/Aj1359/AI-Pond-Planner.git}
 \end{itemize}
