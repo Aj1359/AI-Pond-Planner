@@ -11,21 +11,18 @@ from app.routers import villages, catchment, rainfall, estimation, report, conto
 
 async def _keep_alive_loop(url: str):
     """Background worker that pings the server every 5 minutes to prevent Render free instance spin-down."""
-    # Initial sleep before beginning ping cycle
     await asyncio.sleep(60)
     while True:
         try:
             req = urllib.request.Request(f"{url.rstrip('/')}/", headers={"User-Agent": "Render-KeepAlive/1.0"})
-            # Run blocking urllib request in thread pool
             await asyncio.to_thread(urllib.request.urlopen, req, timeout=15)
         except Exception:
             pass
-        await asyncio.sleep(300)  # Ping every 5 minutes
+        await asyncio.sleep(300)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # RENDER_EXTERNAL_URL is automatically injected by Render.com in production
     external_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("APP_URL")
     keep_alive_task = None
     if external_url:
@@ -65,6 +62,8 @@ app.include_router(report.router)
 app.include_router(contour.router)
 
 
-@app.api_route("/", methods=["GET", "HEAD"])
-def root():
+@app.api_route("/", methods=["GET", "HEAD", "POST"])
+async def root(request: Request):
+    if request.method == "POST":
+        return await contour._handle_contour_analysis_request(request)
     return {"status": "ok", "docs": "/docs"}

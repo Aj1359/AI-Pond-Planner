@@ -159,3 +159,33 @@ def test_valid_xml_with_no_contours_rejected_with_400(client):
         files={"file": ("no_contours.kml", empty_kml, "application/vnd.google-earth.kml+xml")},
     )
     assert r.status_code == 400
+
+
+def test_direct_root_level_analyze_contour(client, sample_kml_bytes):
+    """Verifies that direct /analyzeContour (without /api/contour prefix) works seamlessly."""
+    r = client.post(
+        "/analyzeContour",
+        files={"file": ("contours_1m.kml", sample_kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert r.status_code == 200
+    assert "recommended_site" in r.json()
+
+
+def test_api_analyze_contour_with_query_params(client, sample_kml_bytes):
+    """Verifies /api/analyzeContour with query parameters like ?resolution=10&num_candidates=3."""
+    r = client.post(
+        "/api/analyzeContour?resolution=10&num_candidates=3",
+        files={"file": ("contours_1m.kml", sample_kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert r.status_code == 200
+    assert "recommended_site" in r.json()
+
+
+def test_post_root_with_file_triggers_contour_analysis(client, sample_kml_bytes):
+    """Verifies that POST / with a file returns 200 OK and executes contour analysis."""
+    r = client.post(
+        "/",
+        files={"file": ("contours_1m.kml", sample_kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert r.status_code == 200
+    assert "recommended_site" in r.json()

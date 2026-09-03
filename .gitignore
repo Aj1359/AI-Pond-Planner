@@ -27,3 +27,8 @@ Thumbs.db
 db.webproj
 *.tmp
 *.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.zip
