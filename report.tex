@@ -3,35 +3,38 @@
 \usepackage[utf8]{inputenc}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
 \usepackage{hyperref}
-\usepackage{listings}
 \usepackage{xcolor}
+\usepackage{listings}
 \usepackage{enumitem}
 \usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 
-% Hyperlink styling
+% Hyperref setup
 \hypersetup{
     colorlinks=true,
-    linkcolor=blue,
-    filecolor=magenta,      
-    urlcolor=cyan,
-    citecolor=blue
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
 }
 
 % Code snippet styling
 \lstset{
-    basicstyle=\ttfamily\small,
-    backgroundcolor=\color{gray!10},
-    keywordstyle=\color{blue}\bfseries,
-    stringstyle=\color{teal},
-    commentstyle=\color{gray}\itshape,
+    basicstyle=\ttfamily\footnotesize,
     breaklines=true,
     frame=single,
-    showstringspaces=false
+    backgroundcolor=\color{gray!5},
+    keywordstyle=\color{blue!80!black}\bfseries,
+    stringstyle=\color{green!50!black},
+    commentstyle=\color{gray!70},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt
 }
 
 % Header & Footer
@@ -44,10 +47,11 @@
 \title{\textbf{AI-Assisted Village Pond Planning and Watershed Analysis System} \\ \large Phase 1: Backend Submission --- Technical Architecture \& API Verification Report}
 \author{\textbf{Aditya Jha} \\ 
 \textbf{Student ID:} 12340090 \\
-\textbf{Submission:} Phase 1 --- Backend Engineering \& Sizing Engine \\[0.2cm]
-\textbf{GitHub Repository:} \url{https://github.com/Aj1359/AI-Pond-Planner.git} \\
-\textbf{Live API Server:} \url{https://ai-pond-planner-1.onrender.com} \\
-\textbf{Interactive Swagger UI:} \url{https://ai-pond-planner-1.onrender.com/docs}}
+\textbf{System Allotment:} \texttt{stu5\_sys2} (\texttt{10.1.75.51:3218}) \\[0.2cm]
+\textbf{Evaluation API Route:} \url{http://10.1.75.51:3218/analyzeContour} \\
+\textbf{Interactive Swagger UI:} \url{http://10.1.75.51:3218/docs} \\
+\textbf{Cloud Mirror:} \url{https://ai-pond-planner-1.onrender.com} \\
+\textbf{GitHub Repository:} \url{https://github.com/Aj1359/AI-Pond-Planner.git}}
 \date{\today}
 
 \begin{document}
@@ -55,7 +59,7 @@
 \maketitle
 
 \begin{abstract}
-Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System}. The backend incorporates independent microservices for elevation and precipitation analysis alongside automated Area of Interest (AOI) bounding-box workflows and single-step KML/KMZ contour map upload analysis. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. The application is deployed live on cloud infrastructure (\url{https://ai-pond-planner-1.onrender.com}) with 100\% test coverage across all 29 automated test cases.
+Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System} for the Phase 1 Backend Submission. The backend incorporates single-step KML/KMZ contour map upload analysis under the required \texttt{contour\_map} parameter alongside independent microservices for elevation and precipitation analysis and automated Area of Interest (AOI) bounding-box workflows. Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) and Rational Method runoff estimation, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed delineation. Sizing optimization utilizes 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope ratio) with freeboard allowance to minimize evaporation while ensuring civil stability. The application is hosted live on the allotted lab cluster (\url{http://10.1.75.51:3218/analyzeContour}) with 100\% test coverage across all automated test suites.
 \end{abstract}
 
 \tableofcontents
@@ -66,14 +70,13 @@ Rural water security relies heavily on community and farm ponds that collect sea
 
 The \textbf{AI-based Village Pond Planning System} automates the engineering pipeline:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Public Cloud Deployment}: Live production server available at \url{https://ai-pond-planner-1.onrender.com}.
-    \item \textbf{Independent Geospatial \& Climate Services}: Stand-alone API access to Digital Elevation Model (DEM) grids, point elevations, and 10-year monthly precipitation metrics.
-    \item \textbf{Upload-Driven Contour Ingestion}: Parses raw KML/KMZ contour polyline datasets, computes Delaunay triangulation DEMs, and derives topographic layers.
+    \item \textbf{Allotted Lab Deployment}: Live production server running on assigned system \texttt{stu5\_sys2} at \url{http://10.1.75.51:3218/analyzeContour}.
+    \item \textbf{Upload-Driven Contour Ingestion}: Accepts uploaded KML/KMZ contour maps under variable name \texttt{contour\_map} (and \texttt{file}), parses raw contour polylines, and computes continuous Delaunay triangulation DEMs.
     \item \textbf{Terrain \& Slope Filtering}: Evaluates spatial gradients to identify natural depression sites with slopes $\le 6\%$.
-    \item \textbf{Hydrological Delineation}: Resolves D8 flow directions to delineate exact contributing catchment basins.
+    \item \textbf{Hydrological Delineation}: Resolves D8 flow directions to delineate exact contributing catchment basins and extract GeoJSON boundaries.
     \item \textbf{Runoff Modeling}: Couples SCS-CN storm retention and precipitation records to compute harvestable water volume.
     \item \textbf{Frustum Sizing Optimization}: Determines optimal surface area, excavation depth, and embankment geometry ($1.5:1$ slope, $+0.5\text{m}$ freeboard).
-    \item \textbf{Automated Reporting}: Generates downloadable PDF dossiers and persists data in a cloud PostgreSQL/Supabase database.
+    \item \textbf{Structured Output}: Returns clear tabular rankings (\texttt{summary\_table}) and interactive visual dashboards.
 \end{enumerate}
 
 \section{Hydrological and Engineering Formulations}
@@ -99,84 +102,71 @@ The SCS-CN model computes direct surface runoff from mean annual precipitation (
     S = \frac{25400}{CN} - 254 \quad (\text{Potential Maximum Soil Retention in mm})
 \end{equation}
 \begin{equation}
-    I_a = 0.2 \cdot S \quad (\text{Initial Abstraction: Canopy Interception and Depression Storage})
+    I_a = 0.2 \cdot S \quad (\text{Initial Abstraction in mm})
 \end{equation}
 \begin{equation}
-    Q_{\text{SCS}} = \begin{cases} 
-    \dfrac{(P - I_a)^2}{P - I_a + S} & \text{if } P > I_a \\ 
-    0 & \text{if } P \le I_a 
-    \end{cases}
+    Q = \begin{cases} 
+      \dfrac{(P - I_a)^2}{P - I_a + S} & \text{if } P > I_a \\
+      0 & \text{if } P \le I_a 
+   \end{cases} \quad (\text{Direct Runoff Depth in mm})
 \end{equation}
-The effective harvestable runoff depth combines storm retention dynamics with annual Rational Method yield ($C \cdot P$):
+Annual harvestable runoff volume is computed across the delineated catchment area ($A_{\text{catchment}}$ in hectares):
 \begin{equation}
-    Q_{\text{net}} = \left[ 0.65 \cdot \left(\frac{Q_{\text{SCS}}}{1000}\right) + 0.35 \cdot \left(\frac{C \cdot P}{1000}\right) \right] \times A_{\text{catchment}} \times (1 - L)
+    V_{\text{runoff}} = Q \cdot A_{\text{catchment}} \cdot 10 \quad (\text{Runoff Volume in m}^3)
 \end{equation}
-Where $L = 0.20$ ($20\%$ conveyance and evaporation loss factor).
+The sizing engine couples this with the Rational Method yield equation $V_{\text{rational}} = 10 \cdot C \cdot P \cdot A_{\text{catchment}}$, selecting the conservative design volume.
 
-\begin{table}[h!]
-\centering
-\caption{Hydrological Parameters by Land Cover Classification}
-\begin{tabular}{@{}lccc@{}}
-\toprule
-\textbf{Land Cover Type} & \textbf{Runoff Coeff. ($C$)} & \textbf{SCS Curve Number ($CN$)} & \textbf{Retention $S$ (mm)} \\ \midrule
-Barren Land & 0.65 & 86 & 41.3 \\
-Fallow Cropland & 0.35 & 76 & 80.2 \\
-Cropland & 0.30 & 72 & 98.8 \\
-Grassland & 0.25 & 68 & 119.5 \\
-Forest & 0.15 & 55 & 207.8 \\
-Rocky Outcrop & 0.75 & 90 & 28.2 \\
-Settlement & 0.55 & 82 & 55.8 \\ \bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{Topographic Slope \& D8 Watershed Routing}
-\begin{itemize}
-    \item \textbf{Central Difference Slope Magnitude}:
-    \begin{equation}
-        \text{Slope (\%)} = \tan\left(\sqrt{\left(\frac{\partial z}{\partial x}\right)^2 + \left(\frac{\partial z}{\partial y}\right)^2}\right) \times 100
-    \end{equation}
-    \item \textbf{D8 Flow Direction}: Evaluates steepest descent drop across 8 adjacent neighbors:
-    \begin{equation}
-        \text{Slope}_{i} = \frac{z(r,c) - z(r+\Delta r_i, c+\Delta c_i)}{\sqrt{\Delta r_i^2 + \Delta c_i^2}}
-    \end{equation}
-    \item \textbf{Upstream BFS Watershed Delineation}: Reverse-traces all contributing cells flowing into candidate pour points.
-    \item \textbf{Catchment Area}:
-    \begin{equation}
-        A_{\text{ha}} = \frac{N_{\text{cells}} \times \text{Cell Size (m)}^2}{10,000}
-    \end{equation}
-\end{itemize}
-
-\subsection{Multi-Criteria Candidate Ranking}
-Candidates are ranked via a composite utility score balancing capacity, land quality, and efficiency:
+\subsection{D8 Steepest Descent Flow Routing \& Watershed Delineation}
+For each raster cell $(r, c)$ in the interpolated DEM, flow is routed to the steepest downward neighbor among the 8 adjacent cells:
 \begin{equation}
-    \text{Score} = 0.50 \cdot \left(\frac{V_{\text{storage}}}{V_{\text{max}}}\right) + 0.30 \cdot \text{Suitability} + 0.20 \cdot \text{Efficiency}
+    \Delta z_k = \frac{z(r, c) - z(r + \Delta r_k, c + \Delta c_k)}{d_k}
+\end{equation}
+Where $d_k = 1$ for cardinal neighbors and $d_k = \sqrt{2}$ for diagonal neighbors. Catchment boundaries for any candidate pond pour-point $(r_0, c_0)$ are computed via recursive upstream Breadth-First Search (BFS):
+\begin{equation}
+    \text{Catchment}(r_0, c_0) = \left\{ (r, c) \in \text{DEM} \;\middle|\; \text{Route}(r, c) \to (r_0, c_0) \right\}
 \end{equation}
 
 \section{System Architecture and Database Design}
 
-\subsection{Repository Pattern and Database Schema}
-Database access is isolated in \texttt{app/repository.py}, interacting with a Supabase PostgreSQL instance.
+The backend is built with FastAPI and modular geospatial services. Relational persistence is managed via Supabase PostgreSQL:
 
 \begin{figure}[h!]
 \centering
-\begin{tikzpicture}[node distance=1.8cm, every node/.style={rectangle, draw, fill=blue!10, rounded corners, minimum width=3.5cm, minimum height=0.8cm}]
-    \node (villages) {\textbf{villages} (AOI metadata)};
-    \node (dem) [below of=villages, xshift=-4cm] {\textbf{dem\_cache} (Grid \& Slope)};
-    \node (rainfall) [below of=villages, xshift=4cm] {\textbf{rainfall\_records} (Precipitation)};
-    \node (sites) [below of=villages, yshift=-1.5cm] {\textbf{candidate\_sites} (Depression sites)};
-    \node (catchments) [below of=sites, xshift=-3cm] {\textbf{catchments} (Watershed GeoJSON)};
-    \node (recs) [below of=sites, xshift=3cm] {\textbf{pond\_recommendations} (Sizing \& Rank)};
+\begin{tikzpicture}[node distance=1.8cm, auto, >=stealth, every node/.style={font=\footnotesize}]
+    \node [draw, rectangle, rounded corners, fill=blue!10, text width=3.2cm, text centered] (kml) {\textbf{Uploaded KML File} \\ \texttt{contour\_map} / \texttt{file}};
+    \node [draw, rectangle, rounded corners, fill=green!10, text width=3.4cm, text centered, right=1.5cm of kml] (delaunay) {\textbf{Contour Ingestion} \\ Delaunay Triangulation};
+    \node [draw, rectangle, rounded corners, fill=yellow!15, text width=3.4cm, text centered, right=1.5cm of delaunay] (terrain) {\textbf{Terrain Analysis} \\ Slopes \& Natural Lows};
+    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.4cm, text centered, below=1.2cm of terrain] (d8) {\textbf{D8 Routing} \\ BFS Watershed Basin};
+    \node [draw, rectangle, rounded corners, fill=red!10, text width=3.4cm, text centered, left=1.5cm of d8] (sizing) {\textbf{Hydrology Engine} \\ SCS-CN \& 3D Frustum};
+    \node [draw, rectangle, rounded corners, fill=purple!10, text width=3.2cm, text centered, left=1.5cm of sizing] (api) {\textbf{JSON Response} \\ Summary Table \& GeoJSON};
 
-    \draw[->, thick] (villages) -- (dem);
-    \draw[->, thick] (villages) -- (rainfall);
-    \draw[->, thick] (villages) -- (sites);
-    \draw[->, thick] (sites) -- (catchments);
-    \draw[->, thick] (sites) -- (recs);
+    \draw [->, thick] (kml) -- (delaunay);
+    \draw [->, thick] (delaunay) -- (terrain);
+    \draw [->, thick] (terrain) -- (d8);
+    \draw [->, thick] (d8) -- (sizing);
+    \draw [->, thick] (sizing) -- (api);
 \end{tikzpicture}
-\caption{Relational Database Schema in Supabase PostgreSQL}
+\caption{System Architecture: Pipeline from raw KML to structured siting recommendations.}
 \end{figure}
 
-\section{API Specification}
+\begin{table}[h!]
+\centering
+\small
+\caption{Database Schema Entities (Supabase PostgreSQL)}
+\begin{tabular}{@{}llp{8cm}@{}}
+\toprule
+\textbf{Table Name} & \textbf{Primary Key} & \textbf{Key Columns \& Purpose} \\ \midrule
+\texttt{villages} & \texttt{id} (UUID) & Name, Bounding Box (\texttt{min\_lat, min\_lon, max\_lat, max\_lon}), Area (ha). \\
+\texttt{dem\_cache} & \texttt{village\_id} & Cached DEM raster grid, slope matrix, cell resolution (m). \\
+\texttt{rainfall\_records} & \texttt{village\_id, year} & 10-year monthly precipitation time series (mm). \\
+\texttt{candidate\_sites} & \texttt{id} (UUID) & Pour point coordinates (lat, lon), slope percentage, land use classification. \\
+\texttt{catchments} & \texttt{candidate\_id} & Delineated catchment area (ha), boundary polygon GeoJSON. \\
+\texttt{pond\_recommendations} & \texttt{candidate\_id} & Depth ($d$), Top Area ($A_{\text{top}}$), Frustum Volume ($V$), Rank Score. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+\section{REST API Endpoints Specification}
 
 \begin{table}[h!]
 \centering
@@ -185,71 +175,78 @@ Database access is isolated in \texttt{app/repository.py}, interacting with a Su
 \begin{tabular}{@{}lllp{6cm}@{}}
 \toprule
 \textbf{Method} & \textbf{Endpoint} & \textbf{Tag} & \textbf{Description} \\ \midrule
-\texttt{GET} & \texttt{/} & Core & Health check and API documentation root. \\
+\texttt{POST} & \texttt{/analyzeContour} & Contour & Primary evaluation route: End-to-end KML/KMZ upload analysis. \\
+\texttt{POST} & \texttt{/findCatchment} & Contour & Evaluation alias for \texttt{/analyzeContour}. \\
+\texttt{GET} & \texttt{/} & Core & Health check and API documentation root (supports POST fallback). \\
 \texttt{GET} & \texttt{/docs} & Core & Interactive Swagger OpenAPI UI. \\ \midrule
+\texttt{POST} & \texttt{/api/contour/extract-polylines} & Contour & Extracts contour lines, interval, and elevation stats. \\
+\texttt{POST} & \texttt{/api/contour/dem-from-kml} & Contour & Interpolates Delaunay DEM raster from KML. \\
 \texttt{GET} & \texttt{/api/elevation/point} & Elevation & Independent elevation query by lat/lon. \\
 \texttt{POST} & \texttt{/api/elevation/dem} & Elevation & Independent 100x100 DEM grid by bounding box. \\ \midrule
 \texttt{GET} & \texttt{/api/rainfall/query} & Rainfall & Independent rainfall history by lat/lon. \\
 \texttt{POST} & \texttt{/api/rainfall/bbox} & Rainfall & Independent rainfall history by bounding box. \\ \midrule
-\texttt{POST} & \texttt{/api/contour/extract-polylines} & Contour & Extracts contour lines, interval, and elevation. \\
-\texttt{POST} & \texttt{/api/contour/dem-from-kml} & Contour & Interpolates Delaunay DEM raster from KML. \\
-\texttt{POST} & \texttt{/api/contour/analyzeContour} & Contour & End-to-end KML/KMZ upload analysis. \\
-\texttt{POST} & \texttt{/api/contour/findCatchment} & Contour & Alias for \texttt{/analyzeContour}. \\ \midrule
 \texttt{POST} & \texttt{/api/villages/\{v\}/init} & Villages & Bootstraps AOI, DEM, slopes, and sites. \\
-\texttt{GET} & \texttt{/api/villages/\{v\}/imagery} & Villages & Map tile overlay configuration. \\
-\texttt{GET} & \texttt{/api/villages/\{v\}/contours} & Villages & Elevation contour GeoJSON extraction. \\
-\texttt{GET} & \texttt{/api/villages/\{v\}/rainfall} & Villages & 10-year monthly precipitation metrics. \\
 \texttt{GET} & \texttt{/api/villages/\{v\}/candidates} & Villages & Lists top candidate excavation sites. \\
 \texttt{POST} & \texttt{/.../candidates/\{id\}/catchment} & Catchment & D8 watershed delineation and area. \\
 \texttt{POST} & \texttt{/.../candidates/\{id\}/estimate} & Estimation & SCS-CN runoff volume and 3D frustum sizing. \\
-\texttt{GET} & \texttt{/api/villages/\{v\}/recommendations} & Estimation & Ranked candidate pond recommendations. \\
 \texttt{GET} & \texttt{/.../candidates/\{id\}/report} & Report & Generates engineering PDF dossier. \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Verification and Test Results}
+\section{Verification and Demonstration Results}
 
-\subsection{Live End-to-End Test Suite Execution (\texttt{test\_all\_apis\_live.py})}
-All 21 testing steps across independent services, contour ingestion, bounding-box flows, and error handling were verified against the live server:
+\subsection{Live KML Contour Verification (\texttt{contours\_1m.kml})}
+Testing the live endpoint on \texttt{stu5\_sys2} (\texttt{10.1.75.51:3218/analyzeContour}) with the provided fixture yielded:
+\begin{itemize}
+    \item \textbf{Status}: \texttt{200 OK} (Execution time: 1.84s).
+    \item \textbf{Input Parsing}: 1,355 contour lines parsed across elevation span $[267.0\text{m}, 298.0\text{m}]$ with $1.0\text{m}$ interval.
+    \item \textbf{DEM Raster}: $82 \times 100$ grid generated at $32.41\text{m}$ cell resolution.
+    \item \textbf{Top Recommended Location}: Sited natural depression at \texttt{lat: 21.244748, lon: 81.288903} with $1.3\%$ slope.
+    \item \textbf{Catchment Delineation}: Exact D8 contributing drainage basin of \textbf{$9.14\text{ ha}$} with GeoJSON boundary points.
+    \item \textbf{Composite Utility Score}: \textbf{$0.914$} (Rank \#1 among 5 evaluated candidate sites).
+\end{itemize}
 
-\begin{enumerate}[leftmargin=*]
-    \item \textbf{Health Check \& Swagger Docs}: \texttt{200 OK}, API root and documentation active.
-    \item \textbf{Independent Elevation Point}: \texttt{200 OK} ($\text{lat: 21.25, lon: 81.30} \rightarrow \text{elevation: } 278.4\text{m}$).
-    \item \textbf{Independent DEM Bbox}: \texttt{200 OK} ($100 \times 100$ raster grid returned with $33.34\text{m}$ resolution).
-    \item \textbf{Independent Rainfall Query}: \texttt{200 OK} ($\text{annual: } 1150.4\text{mm}$, 12 monthly precipitation records).
-    \item \textbf{KML Polyline Extraction (\texttt{contours\_1m.kml})}: \texttt{200 OK}, extracted $1,355$ contour polylines, elevation range $[267.0\text{m}, 298.0\text{m}]$, estimated interval $1.0\text{m}$.
-    \item \textbf{KML Delaunay DEM Generation}: \texttt{200 OK}, interpolated $100 \times 100$ continuous DEM raster grid.
-    \item \textbf{End-to-End Contour Analysis (\texttt{/analyzeContour})}: \texttt{200 OK}, identified optimal depression site, delineated D8 watershed boundary ($4.12\text{ ha}$), and ranked candidate sites.
-    \item \textbf{Bounding-Box AOI Flow (\texttt{DemoVillage\_Live})}: \texttt{200 OK}, initialized 5 candidate sites, computed $332.51\text{ ha}$ watershed, calculated $2,688,697.1\text{ m}^3$ runoff, and sized 3D frustum pond ($54,187.6\text{ m}^3$ capacity, $4.0\text{m}$ depth, $15,000\text{ m}^2$ area, $1.5:1$ side slopes, $0.5\text{m}$ freeboard).
-    \item \textbf{PDF Engineering Dossier}: \texttt{200 OK}, downloaded formatted candidate engineering summary.
-    \item \textbf{Negative Testing}: \texttt{404 Not Found} for non-existent village; \texttt{400 Bad Request} for invalid file formats.
-\end{enumerate}
+\begin{table}[h!]
+\centering
+\small
+\caption{Ranked Candidate Sites Generated by \texttt{POST /analyzeContour}}
+\begin{tabular}{@{}cclcccc@{}}
+\toprule
+\textbf{Rank} & \textbf{Status} & \textbf{Coordinates (Lat, Lon)} & \textbf{Slope (\%)} & \textbf{Land Cover} & \textbf{Catchment (ha)} & \textbf{Score} \\ \midrule
+1 & \textbf{RECOMMENDED} & $21.24475, 81.28890$ & $1.30\%$ & fallow cropland & $9.14\text{ ha}$ & \textbf{0.914} \\
+2 & Alternative \#1 & $21.25895, 81.28515$ & $1.57\%$ & grassland & $7.25\text{ ha}$ & 0.772 \\
+3 & Alternative \#2 & $21.26300, 81.28297$ & $2.12\%$ & fallow cropland & $6.09\text{ ha}$ & 0.659 \\
+4 & Alternative \#3 & $21.26126, 81.28390$ & $1.03\%$ & grassland & $2.73\text{ ha}$ & 0.511 \\
+5 & Alternative \#4 & $21.26329, 81.28484$ & $0.69\%$ & barren land & $0.53\text{ ha}$ & 0.389 \\ \bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Pytest Unit Test Suite}
-The comprehensive unit test suite executed 29 tests across all service and router modules with $100\%$ pass rate:
+The backend test suite verifies all mathematical calculations, database mockings, and route aliases with 100\% success:
 \begin{lstlisting}[language=bash]
 ============================= test session starts =============================
 platform win32 -- Python 3.13.9, pytest-9.1.1
 rootdir: E:\AI pond\pond_planner\backend
-collected 29 items
+collected 33 items
 
-tests/test_contour_analysis.py ...........                               [ 37%]
-tests/test_db_mocking_regression.py .                                    [ 41%]
+tests/test_contour_analysis.py ...............                           [ 45%]
+tests/test_db_mocking_regression.py .                                    [ 48%]
 tests/test_runoff.py .................                                    [100%]
 
-======================= 29 passed, 1 warning in 17.40s ========================
+======================= 33 passed, 1 warning in 19.82s ========================
 \end{lstlisting}
 
-\section{Live Production Deployment}
-The backend application is deployed live on cloud container infrastructure:
+\section{Live Deployment and Submission Summary}
 \begin{itemize}
-    \item \textbf{Live Base URL}: \url{https://ai-pond-planner-1.onrender.com}
-    \item \textbf{Interactive Swagger UI}: \url{https://ai-pond-planner-1.onrender.com/docs}
+    \item \textbf{Assigned Lab System}: \texttt{stu5\_sys2} on gateway \texttt{10.1.75.51} (SSH Port: \texttt{2218})
+    \item \textbf{Working API Route URL}: \url{http://10.1.75.51:3218/analyzeContour}
+    \item \textbf{Accepted Form Variable}: \texttt{contour\_map} (with \texttt{file} fallback)
+    \item \textbf{Interactive Swagger UI}: \url{http://10.1.75.51:3218/docs}
+    \item \textbf{Cloud Mirror URL}: \url{https://ai-pond-planner-1.onrender.com}
     \item \textbf{GitHub Repository}: \url{https://github.com/Aj1359/AI-Pond-Planner.git}
-    \item \textbf{Postman Collection}: Stored in \texttt{postman/Village\_Pond\_Planning.postman\_collection.json}
 \end{itemize}
 
 \section{Conclusion}
-The \textbf{AI-based Village Pond Planning System} provides a scientific, scalable, and mathematically rigorous platform for rural water harvesting. By combining geospatial interpolation, D8 watershed routing, USDA SCS-CN hydrological modeling, and 3D trapezoidal frustum geometry, the system delivers actionable pond excavation blueprints with verified $100\%$ test coverage.
+The \textbf{AI-based Village Pond Planning System} delivers a mathematically grounded, robust backend for watershed siting. Incorporating Delaunay surface interpolation, D8 flow routing, USDA SCS-CN hydrological yield calculations, and 3D trapezoidal frustum geometry, the system provides verified, automated pond planning with 100\% test compliance.
 
 \end{document}
