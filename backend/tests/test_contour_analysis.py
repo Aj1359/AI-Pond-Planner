@@ -188,4 +188,16 @@ def test_post_root_with_file_triggers_contour_analysis(client, sample_kml_bytes)
         files={"file": ("contours_1m.kml", sample_kml_bytes, "application/vnd.google-earth.kml+xml")},
     )
     assert r.status_code == 200
-    assert "recommended_site" in r.json()
+    assert "recommended_site" in r.json()
+
+
+def test_analyze_contour_with_contour_map_field_name(client, sample_kml_bytes):
+    """Verifies that POST /analyzeContour with 'contour_map' form field name works seamlessly."""
+    r = client.post(
+        "/analyzeContour",
+        files={"contour_map": ("contours_1m.kml", sample_kml_bytes, "application/vnd.google-earth.kml+xml")},
+    )
+    assert r.status_code == 200
+    assert "recommended_site" in r.json()
+    assert "summary_table" in r.json()
+

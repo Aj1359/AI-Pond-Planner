@@ -29,7 +29,7 @@ ALLOWED_EXTENSIONS = (".kml", ".kmz")
 async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None = None) -> tuple[bytes, str]:
     """
     Robustly extracts uploaded file bytes and filename across any form field key
-    (e.g., 'file', 'contour_file', 'upload_file') or raw body.
+    (e.g., 'contour_map', 'file', 'contour_file', 'upload_file') or raw body.
     """
     if file is not None and getattr(file, "filename", None):
         content = await file.read()
@@ -38,6 +38,14 @@ async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None
 
     try:
         form = await request.form()
+        for preferred_key in ["contour_map", "file", "contour_file", "kml", "kml_file", "upload"]:
+            if preferred_key in form:
+                val = form[preferred_key]
+                if hasattr(val, "read") and hasattr(val, "filename"):
+                    content = await val.read()
+                    if content:
+                        return content, val.filename
+
         for key, val in form.items():
             if hasattr(val, "read") and hasattr(val, "filename"):
                 content = await val.read()
@@ -53,7 +61,7 @@ async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None
     except Exception:
         pass
 
-    raise HTTPException(400, "Uploaded file is empty or missing. Please upload a valid .kml or .kmz file.")
+    raise HTTPException(400, "Uploaded file is empty or missing. Please upload a valid .kml or .kmz file under field name 'contour_map' or 'file'.")
 
 
 def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> dict:
@@ -274,16 +282,28 @@ def _render_html_dashboard(data: dict) -> str:
 # Route handler that accepts all alias paths, formats, and query parameters
 async def _handle_contour_analysis_request(
     request: Request,
+    contour_map: UploadFile = File(None),
     file: UploadFile = File(None),
+    contour_file: UploadFile = File(None),
+    kml: UploadFile = File(None),
     num_candidates: int = Query(5),
     resolution: float = Query(None),
     format: str = Query("json"),
 ):
-    file_bytes, filename = await _extract_file_bytes_and_name(request, file)
-    result = _run_analysis(file_bytes, filename, num_candidates=num_candidates)
+    target_file = contour_map or file or contour_file or kml
+    file_bytes, filename = await _extract_file_bytes_and_name(request, target_file)
+    
+    # Coerce num_candidates if passed as Query object directly
+    try:
+        cand_count = int(num_candidates.default if hasattr(num_candidates, "default") else num_candidates)
+    except Exception:
+        cand_count = 5
+
+    result = _run_analysis(file_bytes, filename, num_candidates=cand_count)
 
     accept_header = request.headers.get("Accept", "")
-    if format == "html" or ("text/html" in accept_header and "application/json" not in accept_header):
+    fmt = format.default if hasattr(format, "default") else format
+    if fmt == "html" or ("text/html" in accept_header and "application/json" not in accept_header):
         return HTMLResponse(_render_html_dashboard(result))
 
     return JSONResponse(result)
@@ -300,12 +320,15 @@ for path in [
     "/api/contour/findCatchment",
 ]:
     router.add_api_route(path, _handle_contour_analysis_request, methods=["POST", "GET"])
-
-
 @router.post("/api/contour/extract-polylines")
-async def extract_polylines(request: Request, file: UploadFile = File(None)):
+async def extract_polylines(
+    request: Request,
+    contour_map: UploadFile = File(None),
+    file: UploadFile = File(None),
+):
     """Extract raw contour polylines, elevations, and intervals from KML/KMZ."""
-    file_bytes, filename = await _extract_file_bytes_and_name(request, file)
+    target_file = contour_map or file
+    file_bytes, filename = await _extract_file_bytes_and_name(request, target_file)
     try:
         contours = contour_ingest.parse_contour_file(file_bytes, filename)
     except contour_ingest.ContourParseError as e:
@@ -326,9 +349,14 @@ async def extract_polylines(request: Request, file: UploadFile = File(None)):
 
 
 @router.post("/api/contour/dem-from-kml")
-async def dem_from_kml(request: Request, file: UploadFile = File(None)):
+async def dem_from_kml(
+    request: Request,
+    contour_map: UploadFile = File(None),
+    file: UploadFile = File(None),
+):
     """Interpolate a 100x100 DEM raster grid directly from KML/KMZ contour polylines."""
-    file_bytes, filename = await _extract_file_bytes_and_name(request, file)
+    target_file = contour_map or file
+    file_bytes, filename = await _extract_file_bytes_and_name(request, target_file)
     try:
         contours = contour_ingest.parse_contour_file(file_bytes, filename)
         dem_result = contour_ingest.build_dem_from_contours(contours)
