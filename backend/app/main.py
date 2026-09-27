@@ -63,6 +63,25 @@ app.include_router(contour.router)
 app.include_router(map_analysis.router)
 app.include_router(location.router)
 
+# ── Mount static frontend for /ui/ fallback ─────────────────────────────
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, RedirectResponse
+
+frontend_dirs = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend")),
+    "/var/www/pond_planner/frontend",
+    "/home/student/AI-Pond-Planner/frontend"
+]
+frontend_path = next((d for d in frontend_dirs if os.path.exists(d)), None)
+
+if frontend_path:
+    app.mount("/ui", StaticFiles(directory=frontend_path, html=True), name="ui")
+
+@app.get("/ui")
+async def ui_redirect():
+    return RedirectResponse(url="/ui/")
+
+
 
 @app.api_route("/", methods=["GET", "HEAD", "POST"])
 async def root(request: Request):
