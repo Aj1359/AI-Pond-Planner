@@ -12,25 +12,30 @@ from __future__ import annotations
 
 import os
 
-from dotenv import load_dotenv
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+except Exception:
+    create_client, Client = None, None
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
-_client: Client | None = None
+_client = None
 
 
-def get_client() -> Client:
+def get_client():
     global _client
     if _client is None:
-        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-            raise RuntimeError(
-                "SUPABASE_URL and SUPABASE_SERVICE_KEY must be set (see .env.example). "
-                "Create a project at https://supabase.com, run backend/supabase/schema.sql "
-                "in its SQL editor, then copy the Project URL and service_role key into your .env."
-            )
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or not create_client:
+            return None
+        try:
+            _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        except Exception:
+            return None
     return _client

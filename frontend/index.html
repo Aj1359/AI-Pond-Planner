@@ -291,15 +291,43 @@
             <div class="col">
               <div class="field-lbl">State Filter</div>
               <select class="inp" id="stateFilter">
-                <option value="">All States (India)</option>
+                <option value="">All States &amp; UTs (India)</option>
+                <option value="Andhra Pradesh">Andhra Pradesh</option>
+                <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                <option value="Assam">Assam</option>
+                <option value="Bihar">Bihar</option>
                 <option value="Chhattisgarh" selected>Chhattisgarh</option>
+                <option value="Goa">Goa</option>
+                <option value="Gujarat">Gujarat</option>
+                <option value="Haryana">Haryana</option>
+                <option value="Himachal Pradesh">Himachal Pradesh</option>
+                <option value="Jharkhand">Jharkhand</option>
+                <option value="Karnataka">Karnataka</option>
+                <option value="Kerala">Kerala</option>
                 <option value="Madhya Pradesh">Madhya Pradesh</option>
                 <option value="Maharashtra">Maharashtra</option>
-                <option value="Uttar Pradesh">Uttar Pradesh</option>
-                <option value="Rajasthan">Rajasthan</option>
-                <option value="Bihar">Bihar</option>
+                <option value="Manipur">Manipur</option>
+                <option value="Meghalaya">Meghalaya</option>
+                <option value="Mizoram">Mizoram</option>
+                <option value="Nagaland">Nagaland</option>
                 <option value="Odisha">Odisha</option>
-                <option value="Gujarat">Gujarat</option>
+                <option value="Punjab">Punjab</option>
+                <option value="Rajasthan">Rajasthan</option>
+                <option value="Sikkim">Sikkim</option>
+                <option value="Tamil Nadu">Tamil Nadu</option>
+                <option value="Telangana">Telangana</option>
+                <option value="Tripura">Tripura</option>
+                <option value="Uttar Pradesh">Uttar Pradesh</option>
+                <option value="Uttarakhand">Uttarakhand</option>
+                <option value="West Bengal">West Bengal</option>
+                <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
+                <option value="Chandigarh">Chandigarh</option>
+                <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Jammu and Kashmir">Jammu and Kashmir</option>
+                <option value="Ladakh">Ladakh</option>
+                <option value="Lakshadweep">Lakshadweep</option>
+                <option value="Puducherry">Puducherry</option>
               </select>
             </div>
           </div>
@@ -507,7 +535,7 @@ const API = window.location.origin;
 // ──────────────────────────────────────────────────────────────────────────────
 // MAP SETUP
 // ──────────────────────────────────────────────────────────────────────────────
-const map = L.map("map", { center: [21.25, 81.30], zoom: 12 });
+const map = L.map("map", { center: [20.5937, 78.9629], zoom: 5 });
 
 const LAYERS = {
   sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Esri Satellite", maxZoom: 19 }),
@@ -650,6 +678,30 @@ document.addEventListener("click", e => {
   if (!e.target.closest(".search-wrap")) document.getElementById("locDropdown").classList.remove("open");
 });
 
+// State Filter change handler -> pan map to selected State
+document.getElementById("stateFilter").addEventListener("change", async (e) => {
+  const st = e.target.value;
+  if (!st) {
+    map.setView([20.5937, 78.9629], 5);
+    return;
+  }
+  try {
+    const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(st + ', India')}&limit=1`);
+    const d = await r.json();
+    if (d.results && d.results.length) {
+      const item = d.results[0];
+      if (item.bbox) {
+        map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[20,20] });
+      } else {
+        map.setView([item.lat, item.lon], 7);
+      }
+      toast(`Map centered on ${st}`, "ok");
+    }
+  } catch (err) {
+    console.error("State geocode error:", err);
+  }
+});
+
 async function selectLocation(item) {
   document.getElementById("locDropdown").classList.remove("open");
   document.getElementById("locSearch").value = item.name;
@@ -670,13 +722,16 @@ async function selectLocation(item) {
 
   fetchRainfall(item.lat, item.lon);
   toast(`Selected: ${item.name}`, "ok");
+
+  // Automatically fetch boundary polygon for instant siting readiness
+  fetchVillageBoundary();
 }
 
-document.getElementById("btnUseBoundary").addEventListener("click", async () => {
-  if (!selectedOsmId) { toast("Search and select a village first", "err"); return; }
-  showLoader("Fetching village boundary…", "Querying OpenStreetMap boundary GeoJSON");
+async function fetchVillageBoundary() {
+  if (!selectedOsmId) return;
+  showLoader("Fetching village boundary…", "Querying boundary GeoJSON & contours");
   try {
-    const url = `${API}/api/location/boundary?osm_type=${selectedOsmType}&osm_id=${selectedOsmId}&q=${encodeURIComponent(selectedName)}`;
+    const url = `${API}/api/location/boundary?osm_type=${selectedOsmType}&osm_id=${selectedOsmId}&q=${encodeURIComponent(selectedName)}&lat=${selectedLat}&lon=${selectedLon}`;
     const r = await fetch(url);
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || "Boundary not found");
@@ -696,7 +751,9 @@ document.getElementById("btnUseBoundary").addEventListener("click", async () => 
     toast(`Village boundary loaded (${d.source})`, "ok");
   } catch (e) { toast(`Boundary error: ${e.message}`, "err"); }
   finally { hideLoader(); }
-});
+}
+
+document.getElementById("btnUseBoundary").addEventListener("click", fetchVillageBoundary);
 
 document.getElementById("btnDrawOwn").addEventListener("click", () => {
   new L.Draw.Polygon(map, drawCtrl.options.draw.polygon).enable();
