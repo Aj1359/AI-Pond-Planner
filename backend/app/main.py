@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import villages, catchment, rainfall, estimation, report, contour, elevation
+from app.routers import villages, catchment, rainfall, estimation, report, contour, elevation, map_analysis
 
 
 async def _keep_alive_loop(url: str):
@@ -60,6 +60,7 @@ app.include_router(elevation.router)
 app.include_router(estimation.router)
 app.include_router(report.router)
 app.include_router(contour.router)
+app.include_router(map_analysis.router)
 
 
 @app.api_route("/", methods=["GET", "HEAD", "POST"])
