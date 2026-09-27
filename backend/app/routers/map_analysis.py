@@ -26,6 +26,8 @@ class PolygonAnalysisRequest(BaseModel):
     mean_annual_rainfall_mm: float = 1150.0  # can come from rainfall API
     num_candidates: int = 3
     dem_source: str = "satellite"            # "satellite" or "kml" (if preloaded)
+    shape_type: str = "polygon"             # "polygon" | "circle" | "bbox"
+    radius_m: Optional[float] = None        # required if shape_type == "circle"
 
 
 class PointElevationRequest(BaseModel):
@@ -35,8 +37,10 @@ class PointElevationRequest(BaseModel):
 
 
 # ------------------------------------------------------------------ helpers
-def _run_full_pipeline(bbox: dict, polygon_coords: list, rainfall_mm: float, num_candidates: int):
-    """Core pipeline: DEM → slope → candidates → catchment → runoff → rank."""
+def _run_full_pipeline(bbox: dict, polygon_coords: list, rainfall_mm: float,
+                       num_candidates: int, shape_type: str = "polygon",
+                       radius_m: float | None = None):
+    """Core pipeline: DEM → slope → mask → candidates → catchment → runoff → rank."""
     # 1. Fetch DEM (satellite or synthetic fallback)
     dem_result = geo_svc.fetch_dem_for_bbox(bbox, grid_size=60)
     dem = dem_result["dem"]
@@ -45,33 +49,31 @@ def _run_full_pipeline(bbox: dict, polygon_coords: list, rainfall_mm: float, num
     # 2. Slope map
     slope = terrain_svc.compute_slope_pct(dem, cell_size_m)
 
-    # 3. If user drew a polygon, find the best candidate INSIDE that polygon
-    #    In addition to auto-candidates from the bbox DEM.
-    candidates = sites_svc.generate_candidate_sites(dem, slope, bbox, top_n=num_candidates * 2)
+    # 3. Build spatial mask from the user-drawn shape
+    if shape_type == "circle" and radius_m is not None:
+        # Circle: use centroid of polygon_coords as center
+        lats = [p[1] for p in polygon_coords]
+        lons = [p[0] for p in polygon_coords]
+        centroid_lat = sum(lats) / len(lats)
+        centroid_lon = sum(lons) / len(lons)
+        area_mask = terrain_svc.mask_circle(bbox, dem.shape[0], dem.shape[1],
+                                            centroid_lat, centroid_lon, radius_m)
+    elif shape_type == "polygon" and len(polygon_coords) >= 3:
+        area_mask = terrain_svc.mask_polygon(bbox, dem.shape[0], dem.shape[1], polygon_coords)
+    else:
+        area_mask = None  # bbox mode — no extra filtering
 
-    # Filter candidates that are inside the drawn polygon (simple bbox filter — fast)
-    lats = [p[1] for p in polygon_coords]
-    lons = [p[0] for p in polygon_coords]
-    poly_bbox = {
-        "min_lat": min(lats), "max_lat": max(lats),
-        "min_lon": min(lons), "max_lon": max(lons),
-    }
-    inside = [
-        c for c in candidates
-        if poly_bbox["min_lat"] <= c["lat"] <= poly_bbox["max_lat"]
-        and poly_bbox["min_lon"] <= c["lon"] <= poly_bbox["max_lon"]
-    ]
-    if not inside:
-        inside = candidates  # fallback to full bbox candidates
-
-    inside = inside[:num_candidates]
+    candidates = sites_svc.generate_candidate_sites(
+        dem, slope, bbox, top_n=num_candidates * 2, mask=area_mask
+    )
+    candidates = candidates[:num_candidates]
 
     # 4. D8 flow direction (computed once, reused for all candidates)
     direction = terrain_svc.d8_flow_direction(dem)
 
     # 5. For each candidate: delineate catchment → runoff estimate → pond sizing
     results = []
-    for cand in inside:
+    for cand in candidates:
         pour_point = (cand["row"], cand["col"])
         mask = terrain_svc.delineate_catchment(direction, pour_point)
         area_ha = terrain_svc.catchment_area_ha(mask, cell_size_m)
@@ -152,7 +154,8 @@ async def analyze_area(req: PolygonAnalysisRequest):
 
     try:
         results, dem_meta = _run_full_pipeline(
-            bbox, req.coordinates, req.mean_annual_rainfall_mm, req.num_candidates
+            bbox, req.coordinates, req.mean_annual_rainfall_mm, req.num_candidates,
+            shape_type=req.shape_type, radius_m=req.radius_m
         )
     except Exception as e:
         raise HTTPException(500, f"Analysis pipeline error: {e}")

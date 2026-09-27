@@ -144,3 +144,58 @@ def delineate_catchment(direction: np.ndarray, pour_point: tuple[int, int]) -> n
 def catchment_area_ha(mask: np.ndarray, cell_size_m: float) -> float:
     cell_area_m2 = cell_size_m**2
     return float(mask.sum() * cell_area_m2 / 10_000.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SPATIAL MASKING — restrict candidate search to user-drawn shapes
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _point_in_polygon(px: float, py: float, polygon: list) -> bool:
+    """Ray-casting algorithm: returns True if (px, py) is inside polygon.
+    polygon is a list of [x, y] pairs (lon, lat)."""
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if ((yi > py) != (yj > py)) and (px < (xj - xi) * (py - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def mask_polygon(bbox: dict, rows: int, cols: int, polygon_coords: list) -> np.ndarray:
+    """Create a boolean grid where True = cell center is inside the polygon.
+    polygon_coords = [[lon, lat], ...] in GeoJSON order."""
+    mask = np.zeros((rows, cols), dtype=bool)
+    lat_range = bbox["max_lat"] - bbox["min_lat"]
+    lon_range = bbox["max_lon"] - bbox["min_lon"]
+    for r in range(rows):
+        lat = bbox["min_lat"] + (r + 0.5) / rows * lat_range
+        for c in range(cols):
+            lon = bbox["min_lon"] + (c + 0.5) / cols * lon_range
+            if _point_in_polygon(lon, lat, polygon_coords):
+                mask[r, c] = True
+    return mask
+
+
+def mask_circle(bbox: dict, rows: int, cols: int,
+                center_lat: float, center_lon: float, radius_m: float) -> np.ndarray:
+    """Create a boolean grid where True = cell center is within radius_m of center.
+    Uses equirectangular approximation (accurate enough for ≤ 50 km)."""
+    mask = np.zeros((rows, cols), dtype=bool)
+    lat_range = bbox["max_lat"] - bbox["min_lat"]
+    lon_range = bbox["max_lon"] - bbox["min_lon"]
+    R = 6_371_000.0  # Earth radius in metres
+    clat_rad = np.radians(center_lat)
+    for r in range(rows):
+        lat = bbox["min_lat"] + (r + 0.5) / rows * lat_range
+        dlat = np.radians(lat - center_lat)
+        for c in range(cols):
+            lon = bbox["min_lon"] + (c + 0.5) / cols * lon_range
+            dlon = np.radians(lon - center_lon) * np.cos(clat_rad)
+            dist = R * np.sqrt(dlat**2 + dlon**2)
+            if dist <= radius_m:
+                mask[r, c] = True
+    return mask

@@ -13,9 +13,12 @@ MAX_SUITABLE_SLOPE_PCT = 6.0
 LAND_TYPE_ZONES = ["barren", "fallow_cropland", "grassland", "cropland"]
 
 
-def generate_candidate_sites(dem: np.ndarray, slope: np.ndarray, bbox: dict, top_n: int = 5) -> list[dict]:
+def generate_candidate_sites(dem: np.ndarray, slope: np.ndarray, bbox: dict,
+                              top_n: int = 5, mask: np.ndarray | None = None) -> list[dict]:
     rows, cols = dem.shape
     suitable_mask = slope <= MAX_SUITABLE_SLOPE_PCT
+    if mask is not None:
+        suitable_mask &= mask
 
     # Prefer local low points (natural depressions) among suitable cells
     candidates = []

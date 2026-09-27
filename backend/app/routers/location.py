@@ -19,7 +19,8 @@ router = APIRouter(prefix="/api/location", tags=["Location Intelligence"])
 _NOM_HEADERS = {"User-Agent": "JalSetu-PondPlanner/2.0 (academic project; contact: student)"}
 _NOM_SEARCH  = "https://nominatim.openstreetmap.org/search"
 _NOM_DETAIL  = "https://nominatim.openstreetmap.org/details.json"
-_OPENMETEO   = "https://archive.open-meteo.com/v1/archive"
+_OPENMETEO_GEO = "https://geocoding-api.open-meteo.com/v1/search"
+_OPENMETEO     = "https://archive.open-meteo.com/v1/archive"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -32,8 +33,10 @@ def search_location(
 ):
     """
     Search for places (village / tehsil / district) using Nominatim.
-    Returns name, type, lat, lon, OSM id — ready for boundary fetch.
+    Falls back to Open-Meteo Geocoding API (GeoNames-backed) for small
+    Indian villages that Nominatim doesn't index.
     """
+    # ── Primary: Nominatim ──
     params = urllib.parse.urlencode({
         "q": q,
         "format": "json",
@@ -42,15 +45,16 @@ def search_location(
         "countrycodes": "in",   # restrict to India
     })
     url = f"{_NOM_SEARCH}?{params}"
+    nominatim_results = []
     try:
         req = urllib.request.Request(url, headers=_NOM_HEADERS)
         with urllib.request.urlopen(req, timeout=10) as resp:
-            results = json.loads(resp.read())
-    except Exception as e:
-        raise HTTPException(502, f"Nominatim error: {e}")
+            nominatim_results = json.loads(resp.read())
+    except Exception:
+        pass  # fall through to fallback
 
     out = []
-    for r in results:
+    for r in nominatim_results:
         addr = r.get("address", {})
         out.append({
             "place_id":    r["place_id"],
@@ -75,6 +79,83 @@ def search_location(
                 "max_lon": float(r["boundingbox"][3]),
             } if "boundingbox" in r else None,
         })
+
+    # ── Fallback: Open-Meteo Geocoding API (GeoNames data) ──
+    # Handles small Indian villages that Nominatim doesn't index
+    if not out:
+        # Strip ", India" / ", State, India" suffixes for cleaner search
+        clean_q = q.replace(", India", "").strip()
+        parts = [p.strip() for p in clean_q.split(",")]
+        village_name = parts[0]
+
+        # Build list of search attempts: exact name + common Hindi transliteration
+        # variants (o↔u, e↔i vowel swaps) to handle alternate spellings
+        attempts = [village_name]
+        lower = village_name.lower()
+        variants = set()
+        for old, new in [("o", "u"), ("u", "o"), ("e", "i"), ("i", "e")]:
+            v = lower.replace(old, new, 1)
+            if v != lower:
+                variants.add(v)
+        # Also try swapping "ko" → "ku", "ke" → "ki" etc. (start of word)
+        for old, new in [("ko", "ku"), ("ku", "ko"), ("ke", "ki"), ("ki", "ke")]:
+            if lower.startswith(old):
+                variants.add(new + lower[len(old):])
+        attempts.extend(sorted(variants))
+
+        for attempt_name in attempts:
+            if out:
+                break
+            geo_params = urllib.parse.urlencode({
+                "name": attempt_name,
+                "count": limit,
+                "language": "en",
+                "format": "json",
+            })
+            geo_url = f"{_OPENMETEO_GEO}?{geo_params}"
+            try:
+                geo_req = urllib.request.Request(geo_url, headers={"User-Agent": "JalSetu/2.0"})
+                with urllib.request.urlopen(geo_req, timeout=8) as geo_resp:
+                    geo_data = json.loads(geo_resp.read())
+                for g in geo_data.get("results", []):
+                    # Filter to India only
+                    if g.get("country_code", "").upper() != "IN":
+                        continue
+                    lat = g["latitude"]
+                    lon = g["longitude"]
+                    delta = 0.01  # ~1.1 km
+                    state_name = g.get("admin1", "")
+                    district_name = g.get("admin2", "")
+                    tehsil_name = g.get("admin3", "")
+                    name = g.get("name", village_name)
+                    display = f"{name}, {tehsil_name}, {district_name}, {state_name}, India"
+                    out.append({
+                        "place_id":    g.get("id", 0),
+                        "osm_type":    "node",
+                        "osm_id":      g.get("id", 0),
+                        "display_name": display,
+                        "name":        name,
+                        "type":        g.get("feature_code", "village"),
+                        "class":       "place",
+                        "lat":         lat,
+                        "lon":         lon,
+                        "address": {
+                            "village":  name,
+                            "tehsil":   tehsil_name,
+                            "district": district_name,
+                            "state":    state_name,
+                        },
+                        "bbox": {
+                            "min_lat": lat - delta,
+                            "max_lat": lat + delta,
+                            "min_lon": lon - delta,
+                            "max_lon": lon + delta,
+                        },
+                        "_source": "open_meteo_geocoding",
+                    })
+            except Exception:
+                pass
+
     return {"results": out, "count": len(out)}
 
 
@@ -165,8 +246,8 @@ def get_boundary(
 
     # Fallback 2: Generate 1.5km box around lat, lon
     if lat is not None and lon is not None:
-        delta_lat = 0.012  # ~1.3 km
-        delta_lon = 0.012
+        delta_lat = 0.027  # ~3 km
+        delta_lon = 0.027
         min_lat, max_lat = lat - delta_lat, lat + delta_lat
         min_lon, max_lon = lon - delta_lon, lon + delta_lon
         return {

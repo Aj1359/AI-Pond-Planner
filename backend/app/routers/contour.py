@@ -64,7 +64,8 @@ async def _extract_file_bytes_and_name(request: Request, file: UploadFile | None
     raise HTTPException(400, "Uploaded file is empty or missing. Please upload a valid .kml or .kmz file under field name 'contour_map' or 'file'.")
 
 
-def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> dict:
+def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5,
+                  area_coords: list | None = None, shape_type: str = "full") -> dict:
     if not filename.lower().endswith(ALLOWED_EXTENSIONS) and not (b"<kml" in file_bytes or b"PK\x03\x04" in file_bytes):
         raise HTTPException(400, f"Unsupported file type. Expected one of: {ALLOWED_EXTENSIONS}")
 
@@ -79,7 +80,13 @@ def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5) -> 
     cell_size_m = dem_result["resolution_m"]
 
     slope = terrain.compute_slope_pct(dem, cell_size_m)
-    candidates = sites_service.generate_candidate_sites(dem, slope, bbox, top_n=num_candidates)
+
+    # Build spatial mask if sub-area was drawn
+    area_mask = None
+    if shape_type != "full" and area_coords and len(area_coords) >= 3:
+        area_mask = terrain.mask_polygon(bbox, dem.shape[0], dem.shape[1], area_coords)
+
+    candidates = sites_service.generate_candidate_sites(dem, slope, bbox, top_n=num_candidates, mask=area_mask)
 
     if not candidates:
         raise HTTPException(
@@ -289,6 +296,8 @@ async def _handle_contour_analysis_request(
     num_candidates: int = Query(5),
     resolution: float = Query(None),
     format: str = Query("json"),
+    area_coords: str = Query(None),
+    shape_type: str = Query("full"),
 ):
     target_file = contour_map or file or contour_file or kml
     file_bytes, filename = await _extract_file_bytes_and_name(request, target_file)
@@ -299,7 +308,20 @@ async def _handle_contour_analysis_request(
     except Exception:
         cand_count = 5
 
-    result = _run_analysis(file_bytes, filename, num_candidates=cand_count)
+    # Parse area_coords from JSON string if provided
+    parsed_area_coords = None
+    if area_coords:
+        try:
+            raw = area_coords.default if hasattr(area_coords, "default") else area_coords
+            if raw:
+                parsed_area_coords = json.loads(raw)
+        except Exception:
+            pass
+
+    st = shape_type.default if hasattr(shape_type, "default") else shape_type
+
+    result = _run_analysis(file_bytes, filename, num_candidates=cand_count,
+                           area_coords=parsed_area_coords, shape_type=st)
 
     accept_header = request.headers.get("Accept", "")
     fmt = format.default if hasattr(format, "default") else format

@@ -1,302 +1,415 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JalSetu Studio — AI Village Pond Planning System</title>
-  <meta name="description" content="AI-powered village pond site selection. Search location or upload contour maps, select sub-areas or analyze entire maps." />
-
+  <title>JalSetu Studio — Village Pond Planning System</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:      #f6f6f3;
-      --surface: #ffffff;
-      --s2:      #f0f0ec;
-      --s3:      #e8e8e4;
-      --border:  #e0e0dc;
-      --accent:  #1a7a5e;
-      --aclt:    rgba(26,122,94,0.1);
-      --acc2:    #0891b2;
-      --ok:      #059669;
-      --warn:    #c77c07;
-      --err:     #c53030;
-      --text:    #1a1a18;
-      --t2:      #4a4a46;
-      --muted:   #888884;
-      --hh:      56px;
+      --bg-main: #f8fafc;
+      --bg-card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #047857;
+      --primary-hover: #065f46;
+      --primary-light: #ecfdf5;
+      --accent: #0284c7;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
     }
     [data-theme="dark"] {
-      --bg:#0d1117; --surface:#161b22; --s2:#1c2330; --s3:#243040;
-      --border:rgba(255,255,255,0.07);
-      --accent:#2dd4a0; --aclt:rgba(45,212,160,0.1); --acc2:#38bdf8;
-      --ok:#34d399; --warn:#fbbf24; --err:#f87171;
-      --text:#e6e6e4; --t2:#a0a09c; --muted:#555550;
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --primary-light: rgba(16,185,129,0.1);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
     }
 
-    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; transition:background .25s,color .25s; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { background: var(--bg-main); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-    /* HEADER */
+    /* ── HEADER NAVBAR ── */
     header {
-      height:var(--hh); display:flex; align-items:center; padding:0 1.1rem;
-      background:var(--surface); border-bottom:1px solid var(--border);
-      flex-shrink:0; gap:.75rem; z-index:700;
+      height: 56px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.25rem;
+      z-index: 100;
     }
-    .brand { display:flex; align-items:center; gap:.55rem; }
-    .brand-logo { width:34px;height:34px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:#fff;font-weight:800;flex-shrink:0; }
-    .brand-name { font-size:1rem;font-weight:800;color:var(--text);line-height:1.15; }
-    .brand-sub  { font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em; }
-    .h-sep      { width:1px;height:22px;background:var(--border); }
-    .status-chip { display:flex;align-items:center;gap:.35rem;background:var(--aclt);border:1px solid rgba(26,122,94,.2);border-radius:999px;padding:.25rem .75rem;font-size:.72rem;font-weight:600;color:var(--accent); }
-    .s-dot { width:6px;height:6px;border-radius:50%;background:var(--accent);animation:blink 2s infinite; }
-    @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-    .hright { margin-left:auto;display:flex;align-items:center;gap:.5rem; }
-    .hbtn { display:inline-flex;align-items:center;gap:.3rem;padding:.4rem .85rem;border-radius:7px;font-size:.8rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--t2);font-family:inherit;transition:all .15s;white-space:nowrap; }
-    .hbtn:hover { border-color:var(--accent);color:var(--accent); }
-    .hbtn-pri { background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 10px rgba(26,122,94,.25); }
-    .hbtn-pri:hover { filter:brightness(1.07);transform:translateY(-1px); }
-    .hbtn-pri:disabled { opacity:.4;cursor:not-allowed;transform:none;box-shadow:none; }
+    .brand { display: flex; align-items: center; gap: .6rem; }
+    .brand-logo {
+      width: 32px; height: 32px; background: var(--primary); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.1rem;
+    }
+    .brand-title { font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; color: var(--text); }
+    .brand-sub { font-size: .65rem; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-left: 2px; }
 
-    /* WORKSPACE */
-    .workspace { display:flex;flex:1;overflow:hidden; }
+    .nav-tabs { display: flex; align-items: center; gap: .35rem; background: var(--bg-main); padding: 3px; border-radius: 10px; border: 1px solid var(--border); }
+    .nav-tab {
+      padding: .4rem .85rem; border-radius: 7px; font-size: .8rem; font-weight: 600; color: var(--muted);
+      border: none; background: transparent; cursor: pointer; transition: all .15s ease; display: flex; align-items: center; gap: .4rem;
+    }
+    .nav-tab.active { background: var(--bg-card); color: var(--primary); font-weight: 700; box-shadow: var(--shadow); }
 
-    /* SIDEBAR */
-    .sidebar { width:390px;min-width:320px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
+    .user-profile { display: flex; align-items: center; gap: .6rem; }
+    .theme-btn {
+      width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .avatar-pill {
+      display: flex; align-items: center; gap: .45rem; padding: 3px 10px 3px 4px; background: var(--bg-main);
+      border: 1px solid var(--border); border-radius: 20px; font-size: .78rem; font-weight: 600;
+    }
+    .avatar-circle { width: 24px; height: 24px; background: var(--primary); border-radius: 50%; color: #fff; font-weight: 700; font-size: .75rem; display: flex; align-items: center; justify-content: center; }
 
-    .sb-head { padding:.9rem 1rem .7rem;border-bottom:1px solid var(--border); }
-    .sb-eyebrow { font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin-bottom:.2rem; }
-    .sb-title  { font-size:1.1rem;font-weight:800;color:var(--text); }
-    .sb-desc   { font-size:.75rem;color:var(--muted);margin-top:.15rem;line-height:1.5; }
+    /* ── MAIN DASHBOARD LAYOUT ── */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 340px 1fr 380px;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
 
-    /* Top Mode Toggle (Search vs Upload Contour) */
-    .mode-toggle { display:flex;background:var(--s2);padding:3px;border-radius:9px;border:1px solid var(--border);margin:.6rem 1rem 0; }
-    .mode-btn { flex:1;padding:.4rem 0;text-align:center;font-size:.75rem;font-weight:700;border:none;background:transparent;color:var(--muted);border-radius:7px;cursor:pointer;transition:all .18s;font-family:inherit; }
-    .mode-btn.active { background:var(--surface);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    /* ── COLUMN 1: LEFT CONTROL SIDEBAR ── */
+    .sidebar-left {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
 
-    /* Steps */
-    .steps { display:flex;padding:.6rem 1rem 0;gap:.2rem; }
-    .step { display:flex;align-items:center;gap:.35rem;padding:.35rem .65rem;border-radius:7px;font-size:.72rem;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:inherit;transition:all .15s; }
-    .step.active { background:var(--aclt);color:var(--accent); }
-    .step-n { font-size:.62rem;font-weight:800; }
-    .prog { height:2.5px;background:var(--border);margin:.45rem 1rem 0;border-radius:2px; }
-    .prog-f { height:100%;background:var(--accent);border-radius:2px;transition:width .4s;width:0%; }
+    /* Step Nav */
+    .steps-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin-bottom: .2rem; }
+    .step-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .5rem .2rem;
+      border-radius: 8px; border: 1px solid var(--border); background: var(--bg-main); color: var(--muted);
+      font-size: .7rem; font-weight: 600; cursor: pointer; transition: all .15s ease;
+    }
+    .step-btn .n {
+      width: 20px; height: 20px; border-radius: 50%; background: var(--border); color: var(--muted);
+      display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700;
+    }
+    .step-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); font-weight: 700; }
+    .step-btn.active .n { background: var(--primary); color: #fff; }
 
-    .sb-body { flex:1;overflow-y:auto;padding:.9rem 1rem;display:flex;flex-direction:column;gap:.75rem; }
-    .panel { display:none;flex-direction:column;gap:.75rem; }
-    .panel.active { display:flex; }
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .85rem;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+    .card-title {
+      font-size: .85rem; font-weight: 700; color: var(--text); display: flex; align-items: center; justify-content: space-between;
+    }
 
-    /* Cards / Inputs */
-    .lbl { font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.3rem; }
-    .card { background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:.75rem .9rem; }
-    .inp { background:var(--s3);border:1.5px solid var(--border);border-radius:7px;color:var(--text);font-family:inherit;font-size:.83rem;padding:.45rem .7rem;outline:none;transition:border-color .15s;width:100%; }
-    .inp:focus { border-color:var(--accent); }
-    select.inp option { background:var(--surface);color:var(--text); }
-    .row { display:flex;gap:.4rem; }
-    .col { flex:1;display:flex;flex-direction:column;gap:.25rem; }
+    /* Toggle Pills */
+    .toggle-pills { display: flex; background: var(--bg-main); padding: 3px; border-radius: 8px; border: 1px solid var(--border); gap: 3px; }
+    .pill-btn {
+      flex: 1; padding: .45rem; border-radius: 6px; border: none; background: transparent; color: var(--muted);
+      font-size: .75rem; font-weight: 600; cursor: pointer; text-align: center; transition: all .15s ease;
+    }
+    .pill-btn.active { background: var(--bg-card); color: var(--primary); font-weight: 700; box-shadow: var(--shadow); }
+
+    /* Inputs & Selects */
+    .inp-group { display: flex; flex-direction: column; gap: .3rem; }
+    .inp-lbl { font-size: .73rem; font-weight: 600; color: var(--muted); }
+    .inp {
+      width: 100%; padding: .5rem .7rem; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--bg-main); color: var(--text); font-size: .8rem; outline: none; transition: border .15s;
+    }
+    .inp:focus { border-color: var(--primary); background: var(--bg-card); }
+    .row { display: flex; gap: .5rem; }
+    .col { flex: 1; display: flex; flex-direction: column; gap: .3rem; }
 
     /* Search Dropdown */
-    .search-wrap { position:relative; }
-    .dropdown { position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-radius:9px;z-index:800;box-shadow:0 8px 30px rgba(0,0,0,.12);max-height:240px;overflow-y:auto;display:none; }
-    .dropdown.open { display:block; }
-    .dd-item { padding:.6rem .85rem;cursor:pointer;border-bottom:1px solid var(--border);transition:background .12s; }
-    .dd-item:last-child { border-bottom:none; }
-    .dd-item:hover { background:var(--aclt); }
-    .dd-name { font-size:.82rem;font-weight:600;color:var(--text); }
-    .dd-addr { font-size:.7rem;color:var(--muted);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .dd-type { font-size:.62rem;background:var(--s3);color:var(--accent);padding:.12rem .4rem;border-radius:4px;float:right;margin-left:.5rem; }
+    .search-wrap { position: relative; }
+    .dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      max-height: 220px; overflow-y: auto; z-index: 1000; display: none;
+    }
+    .dropdown.open { display: block; }
+    .dd-item { padding: .55rem .75rem; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+    .dd-item:hover { background: var(--primary-light); }
+    .dd-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+    .dd-addr { font-size: .7rem; color: var(--muted); }
 
-    /* File drop box */
-    .file-box { border:2px dashed var(--border);border-radius:10px;padding:1.2rem;text-align:center;background:var(--s2);cursor:pointer;transition:all .2s; }
-    .file-box:hover { border-color:var(--accent);background:var(--aclt); }
-    .file-box-title { font-size:.84rem;font-weight:700;color:var(--text); }
-    .file-box-sub { font-size:.72rem;color:var(--muted);margin-top:.2rem; }
+    /* Range Sliders */
+    .slider-header { display: flex; justify-content: space-between; align-items: center; font-size: .75rem; font-weight: 600; }
+    .slider-val { font-weight: 800; color: var(--primary); background: var(--primary-light); padding: 2px 7px; border-radius: 4px; }
+    input[type=range] {
+      width: 100%; accent-color: var(--primary); cursor: pointer; height: 6px; border-radius: 3px; background: var(--border); margin: .3rem 0;
+    }
 
-    /* Rainfall */
-    .rain-auto { display:flex;align-items:center;gap:.45rem;background:var(--aclt);border:1px solid rgba(26,122,94,.2);border-radius:7px;padding:.45rem .7rem;font-size:.78rem;color:var(--accent);font-weight:600; }
-    .rain-loading { color:var(--muted);font-size:.75rem; }
+    /* Buttons */
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+    .btn {
+      padding: .5rem .75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-main);
+      color: var(--text); font-size: .75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .4rem; transition: all .15s;
+    }
+    .btn:hover { background: var(--border); }
+    .btn-primary { background: var(--primary); color: #fff; border: none; font-weight: 700; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-danger { background: #fef2f2; color: var(--danger); border-color: #fecaca; }
 
-    .sl-head { display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem; }
-    .sl-val { font-size:.82rem;font-weight:700;color:var(--accent); }
-    input[type=range] { -webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,55%),var(--border) var(--pct,55%));cursor:pointer;padding:0;border:none;outline:none; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2); }
+    /* File Box Dropzone */
+    .file-box {
+      border: 2px dashed var(--border); border-radius: 10px; padding: 1.2rem .8rem; text-align: center;
+      cursor: pointer; background: var(--bg-main); transition: all .15s;
+    }
+    .file-box:hover { border-color: var(--primary); background: var(--primary-light); }
+    .file-box-title { font-size: .8rem; font-weight: 700; color: var(--text); margin-top: .3rem; }
+    .file-box-sub { font-size: .7rem; color: var(--muted); margin-top: .15rem; }
 
-    /* Tool Buttons */
-    .tool-grid { display:flex;gap:.4rem;flex-wrap:wrap; }
-    .tbtn { display:inline-flex;align-items:center;gap:.3rem;padding:.4rem .75rem;border-radius:7px;font-size:.76rem;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--t2);font-family:inherit;transition:all .15s; }
-    .tbtn:hover { border-color:var(--accent);color:var(--accent);background:var(--aclt); }
-    .tbtn.active,.tbtn.tool-on { background:var(--accent);color:#fff;border-color:var(--accent); }
-    .tool-hint { font-size:.71rem;color:var(--muted);margin-top:.4rem;line-height:1.55; }
+    /* ── COLUMN 2: CENTER MAP WORKSPACE ── */
+    .map-workspace { position: relative; width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; background: #cbd5e1; }
+
+    /* Floating Search Bar over Map */
+    .map-search-bar {
+      position: absolute; top: 12px; left: 60px; z-index: 500; display: flex; gap: .4rem;
+      background: var(--bg-card); padding: 4px; border-radius: 8px; border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12); width: 360px;
+    }
+    .map-search-input { border: none; background: transparent; padding: .4rem .6rem; font-size: .82rem; outline: none; flex: 1; }
+
+    /* Floating Basemap Controls */
+    .map-basemap-bar {
+      position: absolute; top: 12px; right: 12px; z-index: 500; display: flex; gap: 3px;
+      background: var(--bg-card); padding: 3px; border-radius: 8px; border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .map-bm-btn {
+      padding: .35rem .7rem; border-radius: 6px; border: none; background: transparent;
+      color: var(--muted); font-size: .75rem; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .map-bm-btn.active { background: var(--primary); color: #fff; font-weight: 700; }
+
+    /* Vertical Map Toolbar (Left) */
+    .map-toolbar-vert {
+      position: absolute; top: 60px; left: 12px; z-index: 500; display: flex; flex-direction: column; gap: 4px;
+      background: var(--bg-card); padding: 3px; border-radius: 8px; border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .map-tool-btn {
+      width: 32px; height: 32px; border-radius: 6px; border: none; background: transparent;
+      color: var(--text); font-size: .9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .12s;
+    }
+    .map-tool-btn:hover { background: var(--bg-main); }
+    .map-tool-btn.active { background: var(--primary-light); color: var(--primary); }
+
+    /* Floating Map Layers Legend (Bottom Left) */
+    .map-layers-card {
+      position: absolute; bottom: 20px; left: 12px; z-index: 500; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 10px; padding: .65rem .85rem; box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+      width: 220px; display: flex; flex-direction: column; gap: .4rem;
+    }
+    .map-layers-header { font-size: .75rem; font-weight: 800; color: var(--text); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .map-layer-row { display: flex; align-items: center; gap: .5rem; font-size: .72rem; color: var(--muted); font-weight: 600; }
+    .map-layer-row input { accent-color: var(--primary); cursor: pointer; }
+    .dot-legend { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+    /* ── COLUMN 3: RIGHT RESULTS SIDEBAR ── */
+    .sidebar-right {
+      background: var(--bg-card);
+      border-left: 1px solid var(--border);
+      padding: 1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .action-header { display: flex; justify-content: space-between; gap: .5rem; }
+
+    /* Results Tabs */
+    .res-tabs { display: flex; border-bottom: 1px solid var(--border); gap: .8rem; }
+    .res-tab {
+      padding: .5rem 0; border: none; background: transparent; color: var(--muted);
+      font-size: .78rem; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s;
+    }
+    .res-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
 
     /* Candidate Cards */
-    .cand-card { background:var(--s2);border:1.5px solid var(--border);border-radius:10px;padding:.75rem;cursor:pointer;transition:all .18s;margin-bottom:.5rem; }
-    .cand-card:hover { border-color:var(--accent);transform:translateY(-1px); }
-    .cand-card.active { border-color:var(--accent);background:var(--aclt);box-shadow:0 3px 12px rgba(26,122,94,.15); }
-    .cand-head { display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem; }
-    .cand-title { font-size:.85rem;font-weight:800;color:var(--text); }
-    .cand-badge { font-size:.63rem;font-weight:700;padding:.15rem .5rem;border-radius:999px;text-transform:uppercase; }
-
-    /* Stat grid */
-    .st-grid { display:grid;grid-template-columns:1fr 1fr;gap:.45rem; }
-    .stc { background:var(--s2);border:1.5px solid var(--border);border-radius:9px;padding:.65rem .75rem;position:relative;overflow:hidden; }
-    .stc::before { content:'';position:absolute;top:0;left:0;right:0;height:2.5px;background:var(--c,var(--accent)); }
-    .stc-v { font-size:1.1rem;font-weight:800;color:var(--text);line-height:1.2; }
-    .stc-l { font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:.15rem; }
-    .stc-i { font-size:.95rem;margin-bottom:.2rem; }
-
-    /* Result rows */
-    .rr { display:flex;justify-content:space-between;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.78rem; }
-    .rr:last-child { border-bottom:none; }
-    .rl { color:var(--muted); }
-    .rv { font-weight:600;color:var(--text); }
-    .badge { padding:.15rem .5rem;border-radius:999px;font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em; }
-    .bg { background:rgba(5,150,105,.12);color:var(--ok); }
-    .bb { background:rgba(8,145,178,.12);color:var(--acc2); }
-    .bw { background:rgba(199,124,7,.12);color:var(--warn); }
-
-    /* Analyze btn */
-    .analyze { background:var(--accent);color:#fff;border:none;border-radius:9px;padding:.75rem;font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:.45rem;box-shadow:0 3px 14px rgba(26,122,94,.22);transition:all .2s; }
-    .analyze:hover { filter:brightness(1.07);transform:translateY(-1px); }
-    .analyze:disabled { opacity:.4;cursor:not-allowed;transform:none;box-shadow:none; }
-
-    /* MAP */
-    .mapwrap { flex:1;position:relative; }
-    #map { width:100%;height:100%; }
-
-    .maptop { position:absolute;top:10px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:.4rem .85rem;display:flex;align-items:center;gap:.6rem;z-index:500;box-shadow:0 2px 16px rgba(0,0,0,.08);font-size:.76rem; }
-    .maptop-title { font-weight:700;color:var(--text); }
-    .maptop-sub   { font-size:.7rem;color:var(--muted); }
-    .layer-grp { display:flex;background:var(--s2);border-radius:7px;overflow:hidden;border:1px solid var(--border); }
-    .lbtn { padding:.28rem .65rem;font-size:.73rem;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--t2);font-family:inherit;transition:all .15s; }
-    .lbtn.active { background:var(--accent);color:#fff; }
-
-    /* Legend */
-    .legend { position:absolute;bottom:12px;left:12px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:.55rem .8rem;font-size:.7rem;z-index:400;box-shadow:0 2px 10px rgba(0,0,0,.07); }
-    .leg-t { font-weight:700;color:var(--t2);margin-bottom:.35rem; }
-    .leg-r { display:flex;align-items:center;gap:.45rem;color:var(--muted);margin-bottom:.18rem; }
-    .leg-d { width:11px;height:11px;border-radius:3px;flex-shrink:0; }
-
-    /* Badges floating */
-    .fbadge { position:absolute;bottom:12px;right:12px;font-size:.68rem;padding:.28rem .65rem;border-radius:7px;z-index:400;display:none;align-items:center;gap:.3rem; }
-    .fbadge.show { display:flex; }
-    .fbadge.cached { background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.3);color:var(--ok); }
-    .fbadge.fresh  { background:rgba(8,145,178,.1);border:1px solid rgba(8,145,178,.3);color:var(--acc2); }
-    .fbadge.rain-badge { bottom:45px;background:var(--surface);border:1px solid var(--border);color:var(--t2); }
-
-    /* LOADER */
-    .loader { display:none;position:fixed;inset:0;background:rgba(246,246,243,.82);backdrop-filter:blur(5px);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:.9rem; }
-    [data-theme="dark"] .loader { background:rgba(13,17,23,.85); }
-    .loader.on { display:flex; }
-    .spin { width:42px;height:42px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite; }
-    @keyframes sp{to{transform:rotate(360deg)}}
-    .ldr-m { font-size:.85rem;font-weight:600;color:var(--t2); }
-    .ldr-s { font-size:.73rem;color:var(--muted); }
-
-    /* TOAST */
-    #toast { position:fixed;bottom:1.1rem;right:1.1rem;background:var(--surface);border:1.5px solid var(--border);border-radius:9px;padding:.65rem 1rem;font-size:.8rem;z-index:99999;min-width:190px;box-shadow:0 4px 18px rgba(0,0,0,.1);transform:translateY(70px);opacity:0;transition:all .22s; }
-    #toast.show { transform:translateY(0);opacity:1; }
-    #toast.ok  { border-color:var(--ok);color:var(--ok); }
-    #toast.err { border-color:var(--err);color:var(--err); }
-
-    /* POPUP */
-    .leaflet-popup-content-wrapper { background:var(--surface)!important;border:1.5px solid var(--border)!important;border-radius:10px!important;color:var(--text)!important;box-shadow:0 6px 28px rgba(0,0,0,.12)!important; }
-    .leaflet-popup-tip { background:var(--surface)!important; }
-    .leaflet-popup-content { margin:9px 12px!important;font-family:'Inter',sans-serif!important;font-size:.78rem!important; }
-    .pp-t { font-weight:700;color:var(--accent);margin-bottom:.3rem; }
-    .pp-r { display:flex;justify-content:space-between;gap:1rem;padding:2px 0;color:var(--muted); }
-    .pp-r span:last-child { color:var(--text);font-weight:600; }
-
-    ::-webkit-scrollbar { width:4px; }
-    ::-webkit-scrollbar-thumb { background:var(--border);border-radius:2px; }
-
-    @media(max-width:700px) {
-      .sidebar { width:100%;height:48vh;border-right:none;border-top:1px solid var(--border); }
-      .workspace { flex-direction:column-reverse; }
+    .cand-list { display: flex; flex-direction: column; gap: .75rem; }
+    .cand-item {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: .85rem;
+      box-shadow: var(--shadow); cursor: pointer; transition: all .15s ease; position: relative; overflow: hidden;
     }
+    .cand-item:hover { border-color: var(--primary); transform: translateY(-1px); }
+    .cand-item.active { border-color: var(--primary); background: var(--primary-light); }
+    .cand-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: .4rem; }
+    .cand-title { font-size: .82rem; font-weight: 800; color: var(--text); }
+    .cand-score {
+      font-size: .78rem; font-weight: 800; color: var(--primary); background: #d1fae5;
+      padding: 2px 8px; border-radius: 12px;
+    }
+    .cand-coords { font-size: .7rem; color: var(--muted); margin-bottom: .5rem; }
+    .cand-metrics {
+      display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; padding: .4rem; background: var(--bg-main);
+      border-radius: 6px; font-size: .7rem; margin-bottom: .6rem;
+    }
+    .metric-lbl { color: var(--muted); }
+    .metric-val { font-weight: 700; color: var(--text); text-align: right; }
+    .cand-actions { display: flex; gap: .4rem; }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px; z-index: 2000; background: #0f172a; color: #fff;
+      padding: .65rem 1.1rem; border-radius: 8px; font-size: .8rem; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      transform: translateY(100px); opacity: 0; transition: all .25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.ok { background: var(--primary); }
+    #toast.err { background: var(--danger); }
+
+    /* Loader Modal Overlay */
+    #loader {
+      position: fixed; inset: 0; z-index: 3000; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; flex-direction: column; gap: 1rem; color: #fff;
+    }
+    #loader.on { display: flex; }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Site Details Modal Overlay */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 2500; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); width: 100%; max-width: 580px; max-height: 90vh;
+      overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; position: relative;
+      animation: modalIn .2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: .75rem; }
+    .modal-title { font-size: 1.05rem; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: .5rem; }
+    .modal-close {
+      width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-main);
+      color: var(--text); font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s;
+    }
+    .modal-close:hover { background: var(--border); }
+
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .modal-section { background: var(--bg-main); border: 1px solid var(--border); border-radius: 10px; padding: .85rem; display: flex; flex-direction: column; gap: .4rem; }
+    .modal-sec-title { font-size: .78rem; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .03em; margin-bottom: .2rem; }
+    .modal-row { display: flex; justify-content: space-between; font-size: .78rem; border-bottom: 1px dashed var(--border); padding-bottom: .25rem; }
+    .modal-row:last-child { border-bottom: none; }
+    .modal-lbl { color: var(--muted); font-weight: 600; }
+    .modal-val { color: var(--text); font-weight: 700; text-align: right; }
+
+    /* Panels */
+    .panel { display: none; flex-direction: column; gap: .85rem; }
+    .panel.active { display: flex; }
   </style>
 </head>
 <body>
 
-<div class="loader" id="loader">
-  <div class="spin"></div>
-  <div class="ldr-m" id="ldrM">Analyzing terrain…</div>
-  <div class="ldr-s" id="ldrS">Please wait</div>
-</div>
-<div id="toast"></div>
-
-<!-- HEADER -->
-<header>
-  <div class="brand">
-    <div class="brand-logo">≈</div>
-    <div>
-      <div class="brand-name">JalSetu Studio</div>
-      <div class="brand-sub">Village Pond Planning System</div>
-    </div>
-  </div>
-  <div class="h-sep"></div>
-  <div class="status-chip"><div class="s-dot"></div>Planning Workspace</div>
-  <div class="hright">
-    <button class="hbtn" id="themeBtn">🌙</button>
-    <button class="hbtn" id="btnClear">Clear map</button>
-    <button class="hbtn hbtn-pri" id="btnAnalyze" disabled>Analyze ↗</button>
-  </div>
-</header>
-
-<!-- WORKSPACE -->
-<div class="workspace">
-
-  <!-- SIDEBAR -->
-  <div class="sidebar">
-    <div class="sb-head">
-      <div class="sb-eyebrow">Planning Workspace</div>
-      <div class="sb-title">Design Your Village Pond</div>
-      <div class="sb-desc">Search location or upload contour maps to discover optimal pond sites.</div>
+  <!-- ── HEADER NAVBAR ── -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">🌊</div>
+      <div>
+        <div class="brand-title">JalSetu Studio</div>
+        <div class="brand-sub">Village Pond Planning System</div>
+      </div>
     </div>
 
-    <!-- Mode Selector: Search Location vs Upload Contour Map -->
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="btnModeSearch">📍 Search Location</button>
-      <button class="mode-btn" id="btnModeContour">📁 Upload Contour Map</button>
+    <div class="nav-tabs">
+      <button class="nav-tab active">🗺 Planning</button>
+      <button class="nav-tab">📊 Analytics</button>
+      <button class="nav-tab">🌊 Pond Design</button>
+      <button class="nav-tab">📑 Reports</button>
     </div>
 
-    <!-- Steps Navigation -->
-    <div class="steps">
-      <button class="step active" data-tab="draw"><span class="step-n">01</span> Setup &amp; Area</button>
-      <button class="step" data-tab="results"><span class="step-n">02</span> Siting Results</button>
-      <button class="step" data-tab="pond"><span class="step-n">03</span> Pond Specs</button>
+    <div class="user-profile">
+      <button class="theme-btn" id="themeBtn">🌙</button>
+      <div class="avatar-pill">
+        <div class="avatar-circle">A</div>
+        <span>Aditya • School</span>
+      </div>
     </div>
-    <div class="prog"><div class="prog-f" id="pf"></div></div>
+  </header>
 
-    <div class="sb-body">
+  <!-- ── DASHBOARD LAYOUT ── -->
+  <div class="dashboard">
 
-      <!-- ── TAB 01: SETUP & AREA ── -->
+    <!-- ── COLUMN 1: LEFT CONTROL SIDEBAR ── -->
+    <div class="sidebar-left">
+
+      <!-- Step Navigation -->
+      <div class="steps-row">
+        <button class="step-btn active" data-tab="draw">
+          <span class="n">1</span>
+          <span>Setup &amp; Area</span>
+        </button>
+        <button class="step-btn" data-tab="results">
+          <span class="n">2</span>
+          <span>Site Results</span>
+        </button>
+        <button class="step-btn" data-tab="pond">
+          <span class="n">3</span>
+          <span>Pond Specs</span>
+        </button>
+      </div>
+
+      <!-- ── TAB 1: SETUP & AREA ── -->
       <div class="panel active" id="tab-draw">
 
-        <!-- 1. SEARCH LOCATION SECTION -->
-        <div id="sectionSearch">
-          <div class="lbl">🔍 Village / District Search (India)</div>
-          <div class="search-wrap" style="margin-bottom:.5rem">
-            <div class="row">
-              <input class="inp" id="locSearch" placeholder="Type village name (e.g. Kotelabhata)…" autocomplete="off" />
-              <button class="tbtn" id="btnLocSearch" style="white-space:nowrap">Search</button>
-            </div>
-            <div class="dropdown" id="locDropdown"></div>
+        <!-- Location Search Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>📍 Location Search</span>
+            <span style="font-size:.75rem;color:var(--muted);cursor:pointer">?</span>
           </div>
 
-          <!-- State Filter Dropdown -->
-          <div class="row" style="margin-bottom:.5rem">
-            <div class="col">
-              <div class="field-lbl">State Filter</div>
+          <div class="toggle-pills">
+            <button class="pill-btn active" id="btnModeSearch">📍 Search Location</button>
+            <button class="pill-btn" id="btnModeContour">📁 Upload Contour Map</button>
+          </div>
+
+          <!-- Section A: Search Location -->
+          <div id="sectionSearch">
+            <div class="search-wrap">
+              <input class="inp" id="locSearch" placeholder="Enter village, district or coordinates…" autocomplete="off" />
+              <div class="dropdown" id="locDropdown"></div>
+            </div>
+
+            <div class="inp-group" style="margin-top:.6rem">
+              <div class="inp-lbl">State</div>
               <select class="inp" id="stateFilter">
-                <option value="">All States &amp; UTs (India)</option>
+                <option value="" selected>Select State (India)</option>
                 <option value="Andhra Pradesh">Andhra Pradesh</option>
                 <option value="Arunachal Pradesh">Arunachal Pradesh</option>
                 <option value="Assam">Assam</option>
                 <option value="Bihar">Bihar</option>
-                <option value="Chhattisgarh" selected>Chhattisgarh</option>
+                <option value="Chhattisgarh">Chhattisgarh</option>
                 <option value="Goa">Goa</option>
                 <option value="Gujarat">Gujarat</option>
                 <option value="Haryana">Haryana</option>
@@ -320,813 +433,945 @@
                 <option value="Uttar Pradesh">Uttar Pradesh</option>
                 <option value="Uttarakhand">Uttarakhand</option>
                 <option value="West Bengal">West Bengal</option>
-                <option value="Andaman and Nicobar Islands">Andaman and Nicobar Islands</option>
-                <option value="Chandigarh">Chandigarh</option>
-                <option value="Dadra and Nagar Haveli and Daman and Diu">Dadra and Nagar Haveli and Daman and Diu</option>
-                <option value="Delhi">Delhi</option>
-                <option value="Jammu and Kashmir">Jammu and Kashmir</option>
-                <option value="Ladakh">Ladakh</option>
-                <option value="Lakshadweep">Lakshadweep</option>
-                <option value="Puducherry">Puducherry</option>
               </select>
             </div>
+
+            <!-- Selected Location Card -->
+            <div id="selLocCard" style="display:none;margin-top:.6rem;padding:.5rem;background:var(--primary-light);border-radius:8px">
+              <div style="font-size:.78rem;font-weight:700;color:var(--primary)" id="selLocName"></div>
+              <div style="font-size:.68rem;color:var(--muted)" id="selLocSub"></div>
+              <div class="row" style="margin-top:.4rem">
+                <button class="btn btn-primary" id="btnUseBoundary" style="flex:1;font-size:.7rem">Whole Village Boundary</button>
+                <button class="btn" id="btnDrawOwn" style="flex:1;font-size:.7rem">Select Sub-Area</button>
+              </div>
+            </div>
           </div>
 
-          <!-- Selected Location Card -->
-          <div id="selLocCard" class="card" style="display:none;margin-top:.4rem">
-            <div class="lbl" style="margin-bottom:.2rem">📍 Selected Location</div>
-            <div id="selLocName" style="font-size:.88rem;font-weight:700;color:var(--text)"></div>
-            <div id="selLocSub"  style="font-size:.72rem;color:var(--muted);margin-top:.1rem"></div>
-            
-            <div class="lbl" style="margin-top:.6rem;margin-bottom:.3rem">Choose Analysis Scope</div>
-            <div class="row">
-              <button class="tbtn" id="btnUseBoundary" style="flex:1;justify-content:center">Whole Village Boundary</button>
-              <button class="tbtn" id="btnDrawOwn"    style="flex:1;justify-content:center">Select Sub-Area</button>
+          <!-- Section B: Upload Contour Map -->
+          <div id="sectionContour" style="display:none">
+            <div class="file-box" id="fileDropBox">
+              <input type="file" id="contourFileInput" accept=".kml,.kmz" style="display:none" />
+              <div style="font-size:1.4rem">📄</div>
+              <div class="file-box-title" id="fileBoxTitle">Click or Drag &amp; Drop KML File</div>
+              <div class="file-box-sub">Supports .kml and .kmz contour maps</div>
+            </div>
+            <div id="contourActions" style="display:none;margin-top:.5rem">
+              <div class="row">
+                <button class="btn btn-primary" id="btnEntireContour" style="flex:1;font-size:.7rem">Entire Contour Map</button>
+                <button class="btn" id="btnSubContour" style="flex:1;font-size:.7rem">Select Sub-Area</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 2. UPLOAD CONTOUR MAP SECTION -->
-        <div id="sectionContour" style="display:none">
-          <div class="lbl">📁 Upload KML / KMZ Contour File</div>
-          <div class="file-box" id="fileDropBox">
-            <input type="file" id="contourFileInput" accept=".kml,.kmz" style="display:none" />
-            <div style="font-size:1.4rem;margin-bottom:.3rem">📄</div>
-            <div class="file-box-title" id="fileBoxTitle">Click or Drag &amp; Drop KML File</div>
-            <div class="file-box-sub">Supports .kml and .kmz contour maps (1m / 5m interval)</div>
-          </div>
+        <!-- Analysis Parameters Card -->
+        <div class="card">
+          <div class="card-title">⚙ Analysis Parameters</div>
 
-          <div id="contourActions" class="card" style="display:none;margin-top:.6rem">
-            <div class="lbl" style="margin-bottom:.3rem">Contour Analysis Scope</div>
-            <div class="row">
-              <button class="tbtn active" id="btnEntireContour" style="flex:1;justify-content:center">Entire Contour Map</button>
-              <button class="tbtn" id="btnSubContour" style="flex:1;justify-content:center">Select Sub-Area</button>
+          <div class="inp-group">
+            <div class="slider-header">
+              <span>Mean Annual Rainfall</span>
+              <span class="slider-val"><span id="rainVal">1150</span> mm</span>
+            </div>
+            <div id="rainAutoBox" style="display:none;font-size:.7rem;color:var(--primary);font-weight:700">
+              📡 Auto API: <span id="rainAutoVal">—</span> mm/yr
+            </div>
+            <div id="rainLoading" style="display:none;font-size:.7rem;color:var(--muted)">Fetching historical rainfall…</div>
+            <div id="rainManual">
+              <input type="range" id="rainSlider" min="400" max="3000" step="50" value="1150" />
             </div>
           </div>
-        </div>
 
-        <!-- Candidates Count Filter -->
-        <div class="card" style="padding:.65rem .85rem">
-          <div class="row" style="align-items:center;justify-content:space-between">
-            <div class="lbl" style="margin:0">Top Candidate Sites</div>
-            <select class="inp" id="numSites" style="width:140px">
-              <option value="3" selected>Top 3 Sites</option>
-              <option value="4">Top 4 Sites</option>
-              <option value="5">Top 5 Sites</option>
+          <div class="inp-group">
+            <div class="inp-lbl">Hydrologic Soil Group (CN)</div>
+            <select class="inp" id="soilGroup">
+              <option value="HSG_B" selected>Group B — Medium Loam (CN 75)</option>
+              <option value="HSG_C">Group C — Clay Loam (CN 80)</option>
+              <option value="HSG_D">Group D — Heavy Black Clay (CN 85)</option>
+              <option value="HSG_A">Group A — Deep Sand/Silt (CN 65)</option>
+            </select>
+          </div>
+
+          <div class="inp-group">
+            <div class="slider-header">
+              <span>K (Number of Candidate Sites)</span>
+              <span class="slider-val" id="numSitesVal">K = 3</span>
+            </div>
+            <select class="inp" id="numSites">
+              <option value="3" selected>K = 3 Sites</option>
+              <option value="4">K = 4 Sites</option>
+              <option value="5">K = 5 Sites</option>
+              <option value="6">K = 6 Sites</option>
             </select>
           </div>
         </div>
 
-        <!-- Soil Type & Rainfall Options -->
-        <div>
-          <div class="lbl">🌧 Annual Rainfall &amp; Soil Hydrology</div>
-          <div id="rainAutoBox" class="rain-auto" style="display:none">
-            <span>📡</span>
-            <span id="rainAutoVal">—</span>
-            <span style="font-size:.7rem;font-weight:400;color:var(--t2)">mm/yr (Open-Meteo API)</span>
-          </div>
-          <div id="rainLoading" class="rain-loading" style="display:none">Fetching historical rainfall…</div>
-          <div id="rainManual">
-            <div class="sl-head">
-              <span style="font-size:.75rem;color:var(--t2)">Precipitation Override</span>
-              <span class="sl-val"><span id="rainVal">1150</span> mm</span>
-            </div>
-            <input type="range" id="rainSlider" min="400" max="3000" step="50" value="1150" />
-          </div>
-
-          <!-- Soil Hydrology Group -->
-          <div class="row" style="margin-top:.5rem">
-            <div class="col">
-              <div class="field-lbl">Hydrologic Soil Group (CN)</div>
-              <select class="inp" id="soilGroup">
-                <option value="HSG_B" selected>Group B — Medium Loam (CN 75)</option>
-                <option value="HSG_C">Group C — Clay Loam (CN 80)</option>
-                <option value="HSG_D">Group D — Heavy Black Clay (CN 85)</option>
-                <option value="HSG_A">Group A — Deep Sand/Silt (CN 65)</option>
-              </select>
-            </div>
+        <!-- Drawing Tools Card -->
+        <div class="card">
+          <div class="card-title">✏ Drawing Tools</div>
+          <div style="font-size:.7rem;color:var(--muted)">Draw your land boundary (sub-area) with mouse pointer</div>
+          <div class="btn-grid">
+            <button class="btn" id="btnLasso">⬡ Polygon</button>
+            <button class="btn" id="btnRect">⬜ Rectangle</button>
+            <button class="btn" id="btnCircle">◯ Circle</button>
+            <button class="btn btn-danger" id="btnDelShapes">✕ Clear</button>
           </div>
         </div>
 
-        <!-- Map Drawing Tools -->
-        <div class="card" style="padding:.7rem .85rem">
-          <div style="font-size:.74rem;font-weight:700;color:var(--t2);margin-bottom:.5rem">✏ Sub-Area Drawing Tools</div>
-          <div class="tool-grid">
-            <button class="tbtn" id="btnLasso">⬡ Lasso Tool</button>
-            <button class="tbtn" id="btnRect" >⬜ Rectangle</button>
-            <button class="tbtn" id="btnDelShapes">✕ Clear Selection</button>
-          </div>
-          <div class="tool-hint">Select a sub-region or use the entire village/contour boundary for automated siting.</div>
-        </div>
-
-        <!-- Analyze Button -->
-        <button class="analyze" id="btnAnalyze2" disabled>Execute Siting Analysis ↗</button>
+        <!-- Main Execute Button -->
+        <button class="btn btn-primary" id="btnAnalyze2" disabled style="padding:.75rem;font-size:.85rem">
+          🚀 Execute Siting Analysis ↗
+        </button>
 
       </div><!-- /tab-draw -->
 
-      <!-- ── TAB 02: SITING RESULTS ── -->
-      <div class="panel" id="tab-results">
-        <div id="noRes" style="text-align:center;color:var(--muted);font-size:.8rem;padding:1.5rem 0">Select an area or contour map and run analysis.</div>
-        <div id="resBox" style="display:none;flex-direction:column;gap:.65rem">
+    </div><!-- /sidebar-left -->
 
-          <!-- Candidate Selector Cards -->
-          <div class="lbl">📍 Evaluated Candidate Sites</div>
-          <div id="candidateList"></div>
+    <!-- ── COLUMN 2: CENTER MAP WORKSPACE ── -->
+    <div class="map-workspace">
 
-          <!-- Selected Candidate Detail Card -->
-          <div class="card" style="border-color:rgba(26,122,94,.3);background:rgba(26,122,94,.05)">
-            <div class="lbl" style="color:var(--accent);margin-bottom:.4rem" id="selSiteTitle">Recommended Site #1</div>
-            <div class="rr"><span class="rl">Pour Point</span><span class="rv" id="rLoc">—</span></div>
-            <div class="rr"><span class="rl">Elevation</span><span class="rv" id="rElev">—</span></div>
-            <div class="rr"><span class="rl">Terrain Slope</span><span class="rv" id="rSlope">—</span></div>
-            <div class="rr"><span class="rl">Soil Hydrology</span><span class="rv" id="rSoil">—</span></div>
-            <div class="rr"><span class="rl">Land Cover</span><span class="rv" id="rLand">—</span></div>
-            <div class="rr"><span class="rl">Suitability Score</span><span class="rv" id="rSuit">—</span></div>
-          </div>
+      <!-- Floating Map Search Bar -->
+      <div class="map-search-bar">
+        <input class="map-search-input" id="mapSearchInp" placeholder="Search any location..." />
+        <button class="btn btn-primary" id="btnLocSearch" style="padding:.3rem .8rem;font-size:.75rem">Go</button>
+      </div>
 
-          <!-- Key Metrics Grid -->
-          <div class="st-grid">
-            <div class="stc" style="--c:#0ea5e9"><div class="stc-i">💧</div><div class="stc-v" id="sCatch">—</div><div class="stc-l">Catchment (ha)</div></div>
-            <div class="stc" style="--c:#059669"><div class="stc-i">🌊</div><div class="stc-v" id="sWater">—</div><div class="stc-l">Annual Yield (m³)</div></div>
-            <div class="stc" style="--c:#d97706"><div class="stc-i">⛏</div><div class="stc-v" id="sDepth">—</div><div class="stc-l">Dig Depth (m)</div></div>
-            <div class="stc" style="--c:#7c3aed"><div class="stc-i">📐</div><div class="stc-v" id="sSurf">—</div><div class="stc-l">Top Area (m²)</div></div>
-          </div>
+      <!-- Floating Basemap Selector -->
+      <div class="map-basemap-bar">
+        <button class="map-bm-btn" data-layer="osm">Street</button>
+        <button class="map-bm-btn active" data-layer="sat">Satellite</button>
+      </div>
 
-          <!-- Earthwork Excavation Summary -->
-          <div class="card" style="border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.05)">
-            <div class="lbl" style="color:var(--warn);margin-bottom:.4rem">⛏ 3D Frustum Excavation Specs</div>
-            <div class="rr"><span class="rl">Usable Water Depth</span><span class="rv" id="xDepth">—</span></div>
-            <div class="rr"><span class="rl">Total Depth (+ Freeboard)</span><span class="rv" id="xTotal">—</span></div>
-            <div class="rr"><span class="rl">Top Dimensions</span><span class="rv" id="xTop">—</span></div>
-            <div class="rr"><span class="rl">Bottom Dimensions</span><span class="rv" id="xBot">—</span></div>
-            <div class="rr"><span class="rl">Earthwork Excavation Vol</span><span class="rv" id="xVol">—</span></div>
-            <div class="rr"><span class="rl">Storage Efficiency</span><span class="rv" id="xStore">—</span></div>
-          </div>
+      <!-- Vertical Map Toolbar (Left) -->
+      <div class="map-toolbar-vert">
+        <button class="map-tool-btn" id="mapToolZoomIn" title="Zoom In">+</button>
+        <button class="map-tool-btn" id="mapToolZoomOut" title="Zoom Out">-</button>
+        <button class="map-tool-btn" id="mapToolLasso" title="Draw Polygon / Lasso">⬡</button>
+        <button class="map-tool-btn" id="mapToolRect" title="Draw Rectangle">⬜</button>
+        <button class="map-tool-btn" id="mapToolClear" title="Clear Map">🗑</button>
+      </div>
 
+      <!-- Map Element -->
+      <div id="map"></div>
+
+      <!-- Floating Map Layers Legend (Bottom Left) -->
+      <div class="map-layers-card">
+        <div class="map-layers-header">
+          <span>Map Layers</span>
+          <span>▲</span>
         </div>
-      </div><!-- /tab-results -->
+        <label class="map-layer-row"><input type="checkbox" checked /> <span class="dot-legend" style="background:#1a7a5e"></span> Selected Land Boundary</label>
+        <label class="map-layer-row"><input type="checkbox" checked /> <span class="dot-legend" style="background:#0ea5e9"></span> Catchment Basin</label>
+        <label class="map-layer-row"><input type="checkbox" checked /> <span class="dot-legend" style="background:#0284c7"></span> Rivers / Streams</label>
+        <label class="map-layer-row"><input type="checkbox" checked /> <span class="dot-legend" style="background:#e11d48"></span> Candidate Sites</label>
+        <label class="map-layer-row"><input type="checkbox" /> <span class="dot-legend" style="background:#d97706"></span> Elevation Contours</label>
+      </div>
 
-      <!-- ── TAB 03: POND DESIGN SPECS ── -->
-      <div class="panel" id="tab-pond">
-        <div id="noPond" style="text-align:center;color:var(--muted);font-size:.8rem;padding:1.5rem 0">Run an analysis to view engineering pond specifications.</div>
-        <div id="pondBox" style="display:none;flex-direction:column;gap:.65rem">
-          <div class="card">
-            <div class="lbl" style="margin-bottom:.35rem">🏗 3D Inverted Frustum Geometry</div>
-            <div class="rr"><span class="rl">Excavation Depth</span><span class="rv" id="pDep">—</span></div>
-            <div class="rr"><span class="rl">Total Depth (+ Freeboard)</span><span class="rv" id="pTot">—</span></div>
-            <div class="rr"><span class="rl">Top L × W</span><span class="rv" id="pTop">—</span></div>
-            <div class="rr"><span class="rl">Bottom L × W</span><span class="rv" id="pBot">—</span></div>
-            <div class="rr"><span class="rl">Side Slope Ratio</span><span class="rv">1.5 : 1 (H : V)</span></div>
+    </div><!-- /map-workspace -->
+
+    <!-- ── COLUMN 3: RIGHT RESULTS SIDEBAR ── -->
+    <div class="sidebar-right">
+
+      <div class="action-header">
+        <button class="btn btn-danger" id="btnClear" style="font-size:.75rem">🗑 Clear Map</button>
+        <button class="btn btn-primary" id="btnAnalyze" disabled style="flex:1;font-size:.78rem">🚀 Analyze Area</button>
+      </div>
+
+      <div style="font-weight:800;font-size:1rem;color:var(--text)">📊 Analysis Results</div>
+      <div style="font-size:.72rem;color:var(--muted)">Top pond locations based on rainfall, catchment area and terrain suitability.</div>
+
+      <!-- Results Sub-Tabs -->
+      <div class="res-tabs">
+        <button class="res-tab active">Top Sites (<span id="resCount">3</span>)</button>
+        <button class="res-tab">Suitability Map</button>
+        <button class="res-tab">Data Insights</button>
+      </div>
+
+      <!-- Results Content Panels -->
+      <div id="noRes" style="text-align:center;color:var(--muted);font-size:.8rem;padding:2rem 0">
+        Draw an area or search a village location and click <strong>Analyze Area</strong>.
+      </div>
+
+      <div id="resBox" style="display:none;flex-direction:column;gap:1rem">
+
+        <!-- Candidate Site Cards List -->
+        <div class="cand-list" id="candidateList"></div>
+
+        <!-- Selected Candidate Details Card -->
+        <div class="card" style="border-color:var(--primary);background:var(--primary-light)">
+          <div class="card-title" style="color:var(--primary)" id="selSiteTitle">Recommended Site #1</div>
+          <div style="font-size:.72rem;color:var(--muted)" id="rLoc">—</div>
+          <div class="cand-metrics" style="margin-top:.4rem">
+            <div><span class="metric-lbl">Elevation:</span> <span class="metric-val" id="rElev">—</span></div>
+            <div><span class="metric-lbl">Slope:</span> <span class="metric-val" id="rSlope">—</span></div>
+            <div><span class="metric-lbl">Soil:</span> <span class="metric-val" id="rSoil">—</span></div>
+            <div><span class="metric-lbl">Score:</span> <span class="metric-val" id="rSuit">—</span></div>
           </div>
-          <div class="card">
-            <div class="lbl" style="margin-bottom:.35rem">💧 Water Harvesting Capacity</div>
-            <div class="rr"><span class="rl">Frustum Capacity</span><span class="rv" id="pStore">—</span></div>
-            <div class="rr"><span class="rl">Annual Runoff Yield</span><span class="rv" id="pRun">—</span></div>
-            <div class="rr"><span class="rl">Capture Efficiency</span><span class="rv" id="pCap">—</span></div>
+        </div>
+
+        <!-- Frustum Excavation Specs Card -->
+        <div class="card">
+          <div class="card-title">⛏ 3D Frustum Excavation Specs</div>
+          <div class="cand-metrics">
+            <div><span class="metric-lbl">Depth:</span> <span class="metric-val" id="xDepth">—</span></div>
+            <div><span class="metric-lbl">Total Depth:</span> <span class="metric-val" id="xTotal">—</span></div>
+            <div><span class="metric-lbl">Top Dimensions:</span> <span class="metric-val" id="xTop">—</span></div>
+            <div><span class="metric-lbl">Bottom Dimensions:</span> <span class="metric-val" id="xBot">—</span></div>
+            <div><span class="metric-lbl">Excavation Vol:</span> <span class="metric-val" id="xVol">—</span></div>
+            <div><span class="metric-lbl">Efficiency:</span> <span class="metric-val" id="xStore">—</span></div>
           </div>
-          <div class="card">
-            <div class="lbl" style="margin-bottom:.35rem">🌧 Hydrology Model</div>
-            <div class="rr"><span class="rl">Annual Rainfall</span><span class="rv" id="pRain">—</span></div>
-            <div class="rr"><span class="rl">Catchment Basin</span><span class="rv" id="pCatch">—</span></div>
-            <div class="rr"><span class="rl">Hydrologic Method</span><span class="rv">SCS-CN + D8 BFS</span></div>
+        </div>
+
+      </div>
+
+      <!-- Pond Specs Detail View -->
+      <div id="noPond" style="display:none"></div>
+      <div id="pondBox" style="display:none;flex-direction:column;gap:1rem">
+        <div class="card">
+          <div class="card-title">🏗 Pond Engineering Specs</div>
+          <div class="cand-metrics">
+            <div><span class="metric-lbl">Depth:</span> <span class="metric-val" id="pDep">—</span></div>
+            <div><span class="metric-lbl">Total Depth:</span> <span class="metric-val" id="pTot">—</span></div>
+            <div><span class="metric-lbl">Top L × W:</span> <span class="metric-val" id="pTop">—</span></div>
+            <div><span class="metric-lbl">Bottom L × W:</span> <span class="metric-val" id="pBot">—</span></div>
+            <div><span class="metric-lbl">Capacity:</span> <span class="metric-val" id="pStore">—</span></div>
+            <div><span class="metric-lbl">Runoff Yield:</span> <span class="metric-val" id="pRun">—</span></div>
           </div>
         </div>
       </div>
 
-    </div><!-- sb-body -->
-  </div><!-- sidebar -->
+    </div><!-- /sidebar-right -->
 
-  <!-- MAP WORKSPACE -->
-  <div class="mapwrap">
-    <div class="maptop">
-      <span class="maptop-title">Map Workspace</span>
-      <span class="maptop-sub">Satellite terrain map &amp; candidate overlays</span>
-      <div class="layer-grp">
-        <button class="lbtn" data-layer="osm">Street</button>
-        <button class="lbtn active" data-layer="sat">Satellite</button>
+  </div><!-- /dashboard -->
+
+  <!-- Toast Element -->
+  <div id="toast"></div>
+
+  <!-- Site Details Modal Popup -->
+  <div class="modal-overlay" id="siteModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="mSiteTitle">📍 Site #1 — High Suitability</div>
+        <button class="modal-close" id="btnCloseModal">✕</button>
       </div>
+
+      <!-- Quick Status Banner -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--primary-light);border:1px solid var(--primary);border-radius:10px;padding:.75rem 1rem">
+        <div>
+          <div style="font-size:.72rem;color:var(--muted)">Pour Point Location</div>
+          <div style="font-weight:800;font-size:.88rem;color:var(--primary)" id="mCoords">—</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:.72rem;color:var(--muted)">Suitability Score</div>
+          <div style="font-weight:800;font-size:1.1rem;color:var(--primary)" id="mScore">—</div>
+        </div>
+      </div>
+
+      <!-- Details Grid -->
+      <div class="modal-grid">
+        <!-- Section 1: Terrain & Soil -->
+        <div class="modal-section">
+          <div class="modal-sec-title">📍 Terrain &amp; Soil</div>
+          <div class="modal-row"><span class="modal-lbl">Elevation:</span><span class="modal-val" id="mElev">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Terrain Slope:</span><span class="modal-val" id="mSlope">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Soil Hydrology:</span><span class="modal-val" id="mSoil">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Land Cover:</span><span class="modal-val" id="mLand">—</span></div>
+        </div>
+
+        <!-- Section 2: Hydrology -->
+        <div class="modal-section">
+          <div class="modal-sec-title">💧 Watershed Hydrology</div>
+          <div class="modal-row"><span class="modal-lbl">Catchment Basin:</span><span class="modal-val" id="mCatch">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Mean Rainfall:</span><span class="modal-val" id="mRain">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Annual Yield:</span><span class="modal-val" id="mYield">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Hydro Model:</span><span class="modal-val">SCS-CN + D8</span></div>
+        </div>
+      </div>
+
+      <!-- Section 3: 3D Frustum Geometry -->
+      <div class="modal-section">
+        <div class="modal-sec-title">🏗 3D Inverted Frustum Excavation Specs</div>
+        <div class="modal-grid" style="gap:.4rem;background:transparent">
+          <div class="modal-row"><span class="modal-lbl">Usable Depth:</span><span class="modal-val" id="mDep">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Total Depth (+ Freeboard):</span><span class="modal-val" id="mTot">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Top Dimensions (L × W):</span><span class="modal-val" id="mTop">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Bottom Dimensions:</span><span class="modal-val" id="mBot">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Earthwork Volume:</span><span class="modal-val" id="mVol">—</span></div>
+          <div class="modal-row"><span class="modal-lbl">Capture Efficiency:</span><span class="modal-val" id="mCap">—</span></div>
+        </div>
+      </div>
+
+      <!-- Footer Buttons -->
+      <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.2rem">
+        <button class="btn btn-primary" id="btnConfirmSite" style="padding:.6rem 1.1rem;font-size:.8rem">Select &amp; Confirm Site ✓</button>
+        <button class="btn" id="btnDismissModal" style="padding:.6rem 1.1rem;font-size:.8rem">Close</button>
+      </div>
+
     </div>
-
-    <div id="map"></div>
-
-    <div class="legend">
-      <div class="leg-t">Map Legend</div>
-      <div class="leg-r"><div class="leg-d" style="background:rgba(26,122,94,.35);border:1.5px solid #1a7a5e"></div>Selected Land Polygon</div>
-      <div class="leg-r"><div class="leg-d" style="background:rgba(14,165,233,.4);border:1.5px solid #0ea5e9"></div>Catchment Basin</div>
-      <div class="leg-r"><div class="leg-d" style="background:#e11d48;border-radius:50%;height:11px;width:11px"></div>Rank #1 Recommended</div>
-      <div class="leg-r"><div class="leg-d" style="background:#0284c7;border-radius:50%;height:11px;width:11px"></div>Rank #2 Alternative</div>
-      <div class="leg-r"><div class="leg-d" style="background:#d97706;border-radius:50%;height:11px;width:11px"></div>Rank #3 Alternative</div>
-    </div>
-
-    <div class="fbadge rain-badge" id="rainBadge">🌧 Rainfall: — mm/yr</div>
-    <div class="fbadge" id="cacheBadge">—</div>
   </div>
 
-</div><!-- workspace -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script>
+    const API = "http://localhost:3000";
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-<script>
-// ──────────────────────────────────────────────────────────────────────────────
-// CONFIG
-// ──────────────────────────────────────────────────────────────────────────────
-const API = window.location.origin;
+    // MAP SETUP
+    const map = L.map("map", { center: [20.5937, 78.9629], zoom: 5, zoomControl: false });
 
-// ──────────────────────────────────────────────────────────────────────────────
-// MAP SETUP
-// ──────────────────────────────────────────────────────────────────────────────
-const map = L.map("map", { center: [20.5937, 78.9629], zoom: 5 });
+    const LAYERS = {
+      sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Esri Satellite", maxZoom: 19 }),
+      osm: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }),
+    };
+    LAYERS.sat.addTo(map);
 
-const LAYERS = {
-  sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Esri Satellite", maxZoom: 19 }),
-  osm: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }),
-};
-LAYERS.sat.addTo(map);
-
-document.querySelectorAll(".lbtn").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll(".lbtn").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    Object.values(LAYERS).forEach(l => map.removeLayer(l));
-    LAYERS[b.dataset.layer].addTo(map);
-  });
-});
-
-// ──────────────────────────────────────────────────────────────────────────────
-// STATE
-// ──────────────────────────────────────────────────────────────────────────────
-let activeMode = "search"; // "search" or "contour"
-let selectedLat = null, selectedLon = null;
-let selectedOsmType = null, selectedOsmId = null, selectedName = "";
-let currentPolygon = null;
-let uploadedKmlFile = null;
-let resultData = null;
-let selectedCandidateIndex = 0;
-let resultLayers = [];
-let autoRainfall = null;
-
-// Color palette for candidates
-const CANDIDATE_COLORS = [
-  { pin: "#e11d48", badge: "bg-red", label: "Rank #1 (Recommended)" },
-  { pin: "#0284c7", badge: "bg-blue", label: "Rank #2 (Alternative)" },
-  { pin: "#d97706", badge: "bg-amber", label: "Rank #3 (Alternative)" },
-  { pin: "#7c3aed", badge: "bg-purple", label: "Rank #4 (Alternative)" },
-  { pin: "#059669", badge: "bg-emerald", label: "Rank #5 (Alternative)" },
-];
-
-// ──────────────────────────────────────────────────────────────────────────────
-// MODE TOGGLE (SEARCH VS CONTOUR)
-// ──────────────────────────────────────────────────────────────────────────────
-document.getElementById("btnModeSearch").addEventListener("click", () => setMode("search"));
-document.getElementById("btnModeContour").addEventListener("click", () => setMode("contour"));
-
-function setMode(mode) {
-  activeMode = mode;
-  document.getElementById("btnModeSearch").classList.toggle("active", mode === "search");
-  document.getElementById("btnModeContour").classList.toggle("active", mode === "contour");
-  document.getElementById("sectionSearch").style.display  = mode === "search" ? "block" : "none";
-  document.getElementById("sectionContour").style.display = mode === "contour" ? "block" : "none";
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// DRAW TOOLS
-// ──────────────────────────────────────────────────────────────────────────────
-const drawnItems = new L.FeatureGroup().addTo(map);
-const drawCtrl = new L.Control.Draw({
-  position: "topleft",
-  draw: {
-    polygon:   { shapeOptions: { color:"#1a7a5e", fillOpacity:.18, weight:2.5 }, allowIntersection: false },
-    rectangle: { shapeOptions: { color:"#1a7a5e", fillOpacity:.18, weight:2.5 } },
-    circle: false, circlemarker: false, polyline: false, marker: false,
-  },
-  edit: { featureGroup: drawnItems },
-});
-map.addControl(drawCtrl);
-
-map.on(L.Draw.Event.CREATED, e => {
-  drawnItems.clearLayers();
-  currentPolygon = e.layer;
-  drawnItems.addLayer(currentPolygon);
-  setReady(true);
-  toast("Area selected! Click Execute Siting Analysis ↗", "ok");
-});
-map.on(L.Draw.Event.DELETED, () => { currentPolygon = null; setReady(false); });
-
-document.getElementById("btnLasso").addEventListener("click", () => {
-  new L.Draw.Polygon(map, drawCtrl.options.draw.polygon).enable();
-});
-document.getElementById("btnRect").addEventListener("click", () => {
-  new L.Draw.Rectangle(map, drawCtrl.options.draw.rectangle).enable();
-});
-document.getElementById("btnDelShapes").addEventListener("click", () => {
-  drawnItems.clearLayers(); currentPolygon = null; setReady(false);
-  clearResultLayers(); toast("Shapes cleared", "ok");
-});
-
-function setReady(v) {
-  document.getElementById("btnAnalyze").disabled  = !v;
-  document.getElementById("btnAnalyze2").disabled = !v;
-  setProg(v ? 33 : 0);
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// LOCATION SEARCH (INDIA STATES & VILLAGES)
-// ──────────────────────────────────────────────────────────────────────────────
-let searchTimer = null;
-document.getElementById("locSearch").addEventListener("input", () => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(doSearch, 350);
-});
-document.getElementById("btnLocSearch").addEventListener("click", doSearch);
-
-async function doSearch() {
-  const q = document.getElementById("locSearch").value.trim();
-  const state = document.getElementById("stateFilter").value;
-  if (q.length < 2) return;
-  const fullQ = state ? `${q}, ${state}, India` : `${q}, India`;
-
-  const dd = document.getElementById("locDropdown");
-  dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--muted)">Searching…</div></div>`;
-  dd.classList.add("open");
-
-  try {
-    const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(fullQ)}&limit=8`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail);
-    dd.innerHTML = "";
-    if (!d.results.length) {
-      dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--muted)">No matching locations found</div></div>`;
-      return;
-    }
-    d.results.forEach(item => {
-      const el = document.createElement("div");
-      el.className = "dd-item";
-      el.innerHTML = `
-        <span class="dd-type">${item.type || item.class}</span>
-        <div class="dd-name">${item.name}</div>
-        <div class="dd-addr">${item.display_name}</div>
-      `;
-      el.addEventListener("click", () => selectLocation(item));
-      dd.appendChild(el);
+    document.querySelectorAll(".map-bm-btn").forEach(b => {
+      b.addEventListener("click", () => {
+        document.querySelectorAll(".map-bm-btn").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        Object.values(LAYERS).forEach(l => map.removeLayer(l));
+        LAYERS[b.dataset.layer].addTo(map);
+      });
     });
-  } catch (e) {
-    dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--err)">Error: ${e.message}</div></div>`;
-  }
-}
 
-document.addEventListener("click", e => {
-  if (!e.target.closest(".search-wrap")) document.getElementById("locDropdown").classList.remove("open");
-});
+    // Map Zoom Toolbar Buttons
+    document.getElementById("mapToolZoomIn").addEventListener("click", () => map.zoomIn());
+    document.getElementById("mapToolZoomOut").addEventListener("click", () => map.zoomOut());
+    document.getElementById("mapToolLasso").addEventListener("click", () => enableFreehandLasso());
+    document.getElementById("mapToolRect").addEventListener("click", () => new L.Draw.Rectangle(map, drawCtrl.options.draw.rectangle).enable());
+    document.getElementById("mapToolClear").addEventListener("click", () => document.getElementById("btnClear").click());
 
-// State Filter change handler -> pan map to selected State
-document.getElementById("stateFilter").addEventListener("change", async (e) => {
-  const st = e.target.value;
-  if (!st) {
-    map.setView([20.5937, 78.9629], 5);
-    return;
-  }
-  try {
-    const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(st + ', India')}&limit=1`);
-    const d = await r.json();
-    if (d.results && d.results.length) {
-      const item = d.results[0];
-      if (item.bbox) {
-        map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[20,20] });
-      } else {
-        map.setView([item.lat, item.lon], 7);
+    // Sync floating search input with left search input
+    const mapSearch = document.getElementById("mapSearchInp");
+    const locSearch = document.getElementById("locSearch");
+    mapSearch.addEventListener("input", e => { locSearch.value = e.target.value; doSearch(); });
+
+    // STATE
+    let activeMode = "search";
+    let selectedLat = null, selectedLon = null;
+    let selectedOsmType = null, selectedOsmId = null, selectedName = "";
+    let currentPolygon = null;
+    let uploadedKmlFile = null;
+    let resultData = null;
+    let selectedCandidateIndex = 0;
+    let resultLayers = [];
+    let autoRainfall = null;
+    let drawnShapeType = "polygon";
+    let drawnCircleCenter = null;
+    let drawnCircleRadius = null;
+
+    const CANDIDATE_COLORS = [
+      { pin: "#e11d48", label: "Rank #1 (Recommended)" },
+      { pin: "#0284c7", label: "Rank #2 (Alternative)" },
+      { pin: "#d97706", label: "Rank #3 (Alternative)" },
+      { pin: "#7c3aed", label: "Rank #4 (Alternative)" },
+      { pin: "#059669", label: "Rank #5 (Alternative)" },
+    ];
+
+    // MODE TOGGLE
+    document.getElementById("btnModeSearch").addEventListener("click", () => setMode("search"));
+    document.getElementById("btnModeContour").addEventListener("click", () => setMode("contour"));
+
+    function setMode(mode) {
+      activeMode = mode;
+      document.getElementById("btnModeSearch").classList.toggle("active", mode === "search");
+      document.getElementById("btnModeContour").classList.toggle("active", mode === "contour");
+      document.getElementById("sectionSearch").style.display  = mode === "search" ? "block" : "none";
+      document.getElementById("sectionContour").style.display = mode === "contour" ? "block" : "none";
+      switchTab("draw");
+    }
+
+    // DRAW TOOLS (Freehand Lasso)
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawCtrl = new L.Control.Draw({
+      position: "topleft",
+      draw: {
+        polygon:   { shapeOptions: { color:"#047857", fillOpacity:.18, weight:2.5 }, allowIntersection: false },
+        rectangle: { shapeOptions: { color:"#047857", fillOpacity:.18, weight:2.5 } },
+        circle:    { shapeOptions: { color:"#047857", fillOpacity:.18, weight:2.5 } },
+        circlemarker: false, polyline: false, marker: false,
+      },
+      edit: { featureGroup: drawnItems },
+    });
+
+    let freehandActive = false;
+    let isFreehandDrawing = false;
+    let freehandPoints = [];
+    let tempFreehandPoly = null;
+
+    function enableFreehandLasso() {
+      freehandActive = true;
+      map.getContainer().style.cursor = "crosshair";
+      toast("Click & drag mouse pointer to draw a lasso shape!", "ok");
+    }
+
+    function stopFreehandLasso() {
+      freehandActive = false;
+      isFreehandDrawing = false;
+      map.getContainer().style.cursor = "";
+      map.dragging.enable();
+    }
+
+    map.on("mousedown", e => {
+      if (!freehandActive) return;
+      isFreehandDrawing = true;
+      map.dragging.disable();
+      drawnItems.clearLayers();
+      freehandPoints = [e.latlng];
+      tempFreehandPoly = L.polygon([freehandPoints], { color: "#047857", fillOpacity: .18, weight: 2.5 }).addTo(drawnItems);
+    });
+
+    map.on("mousemove", e => {
+      if (!freehandActive || !isFreehandDrawing) return;
+      const last = freehandPoints[freehandPoints.length - 1];
+      if (last && last.distanceTo(e.latlng) > 2) {
+        freehandPoints.push(e.latlng);
+        tempFreehandPoly.setLatLngs([freehandPoints]);
       }
-      toast(`Map centered on ${st}`, "ok");
+    });
+
+    function finishFreehand() {
+      if (!freehandActive || !isFreehandDrawing) return;
+      isFreehandDrawing = false;
+      stopFreehandLasso();
+
+      if (freehandPoints.length > 2) {
+        currentPolygon = tempFreehandPoly;
+        drawnShapeType = "polygon";
+        drawnCircleCenter = null;
+        drawnCircleRadius = null;
+        setReady(true);
+        toast("Area selected! Click Analyze Area ↗", "ok");
+      } else {
+        if (tempFreehandPoly) drawnItems.removeLayer(tempFreehandPoly);
+        setReady(false);
+      }
     }
-  } catch (err) {
-    console.error("State geocode error:", err);
-  }
-});
 
-async function selectLocation(item) {
-  document.getElementById("locDropdown").classList.remove("open");
-  document.getElementById("locSearch").value = item.name;
+    map.on("mouseup", finishFreehand);
+    document.addEventListener("mouseup", () => { if (isFreehandDrawing) finishFreehand(); });
 
-  selectedLat = item.lat; selectedLon = item.lon;
-  selectedOsmType = item.osm_type; selectedOsmId = item.osm_id;
-  selectedName = item.name;
+    map.on(L.Draw.Event.CREATED, e => {
+      stopFreehandLasso();
+      drawnItems.clearLayers();
+      currentPolygon = e.layer;
+      drawnItems.addLayer(currentPolygon);
 
-  document.getElementById("selLocCard").style.display = "block";
-  document.getElementById("selLocName").textContent = item.name;
-  document.getElementById("selLocSub").textContent  = item.display_name;
+      if (e.layerType === "circle") {
+        drawnShapeType = "circle";
+        drawnCircleCenter = e.layer.getLatLng();
+        drawnCircleRadius = e.layer.getRadius();
+      } else if (e.layerType === "rectangle") {
+        drawnShapeType = "rectangle";
+        drawnCircleCenter = null; drawnCircleRadius = null;
+      } else {
+        drawnShapeType = "polygon";
+        drawnCircleCenter = null; drawnCircleRadius = null;
+      }
 
-  if (item.bbox) {
-    map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[30,30] });
-  } else {
-    map.setView([item.lat, item.lon], 13);
-  }
+      setReady(true);
+      toast("Area selected! Click Analyze Area ↗", "ok");
+    });
+    map.on(L.Draw.Event.DELETED, () => { currentPolygon = null; drawnShapeType = "polygon"; setReady(false); });
 
-  fetchRainfall(item.lat, item.lon);
-  toast(`Selected: ${item.name}`, "ok");
+    document.getElementById("btnLasso").addEventListener("click", enableFreehandLasso);
+    document.getElementById("btnRect").addEventListener("click", () => {
+      stopFreehandLasso();
+      new L.Draw.Rectangle(map, drawCtrl.options.draw.rectangle).enable();
+    });
+    document.getElementById("btnCircle").addEventListener("click", () => {
+      stopFreehandLasso();
+      new L.Draw.Circle(map, drawCtrl.options.draw.circle).enable();
+    });
+    document.getElementById("btnDelShapes").addEventListener("click", () => {
+      stopFreehandLasso();
+      drawnItems.clearLayers(); currentPolygon = null; drawnShapeType = "polygon";
+      drawnCircleCenter = null; drawnCircleRadius = null;
+      setReady(false); clearResultLayers(); toast("Shapes cleared", "ok");
+    });
 
-  // Automatically fetch boundary polygon for instant siting readiness
-  fetchVillageBoundary();
-}
-
-async function fetchVillageBoundary() {
-  if (!selectedOsmId) return;
-  showLoader("Fetching village boundary…", "Querying boundary GeoJSON & contours");
-  try {
-    const url = `${API}/api/location/boundary?osm_type=${selectedOsmType}&osm_id=${selectedOsmId}&q=${encodeURIComponent(selectedName)}&lat=${selectedLat}&lon=${selectedLon}`;
-    const r = await fetch(url);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || "Boundary not found");
-
-    drawnItems.clearLayers();
-    const geom = d.geojson;
-    if (geom.type === "Polygon") {
-      const latlngs = geom.coordinates[0].map(c => [c[1], c[0]]);
-      currentPolygon = L.polygon(latlngs, { color:"#1a7a5e", fillOpacity:.18, weight:2.5 });
-    } else if (geom.type === "MultiPolygon") {
-      const rings = geom.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
-      currentPolygon = L.polygon(rings, { color:"#1a7a5e", fillOpacity:.18, weight:2.5 });
+    function setReady(v) {
+      document.getElementById("btnAnalyze").disabled  = !v;
+      document.getElementById("btnAnalyze2").disabled = !v;
     }
-    drawnItems.addLayer(currentPolygon);
-    map.fitBounds(currentPolygon.getBounds().pad(.05));
-    setReady(true);
-    toast(`Village boundary loaded (${d.source})`, "ok");
-  } catch (e) { toast(`Boundary error: ${e.message}`, "err"); }
-  finally { hideLoader(); }
-}
 
-document.getElementById("btnUseBoundary").addEventListener("click", fetchVillageBoundary);
+    // LOCATION SEARCH
+    let searchTimer = null;
+    locSearch.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(doSearch, 350); });
+    document.getElementById("btnLocSearch").addEventListener("click", doSearch);
 
-document.getElementById("btnDrawOwn").addEventListener("click", () => {
-  new L.Draw.Polygon(map, drawCtrl.options.draw.polygon).enable();
-  toast("Draw custom area on the map", "ok");
-});
+    async function doSearch() {
+      const q = locSearch.value.trim();
+      const state = document.getElementById("stateFilter").value;
+      if (q.length < 2) return;
+      const fullQ = state ? `${q}, ${state}, India` : `${q}, India`;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// CONTOUR FILE UPLOAD HANDLER
-// ──────────────────────────────────────────────────────────────────────────────
-const fileBox = document.getElementById("fileDropBox");
-const fileInput = document.getElementById("contourFileInput");
+      const dd = document.getElementById("locDropdown");
+      dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--muted)">Searching…</div></div>`;
+      dd.classList.add("open");
 
-fileBox.addEventListener("click", () => fileInput.click());
-fileBox.addEventListener("dragover", e => { e.preventDefault(); fileBox.style.borderColor = "var(--accent)"; });
-fileBox.addEventListener("dragleave", () => fileBox.style.borderColor = "var(--border)");
-fileBox.addEventListener("drop", e => {
-  e.preventDefault(); fileBox.style.borderColor = "var(--border)";
-  if (e.dataTransfer.files.length) handleContourFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener("change", e => {
-  if (e.target.files.length) handleContourFile(e.target.files[0]);
-});
+      try {
+        const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(fullQ)}&limit=8`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail);
+        dd.innerHTML = "";
+        if (!d.results.length) {
+          dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--muted)">No matching locations found</div></div>`;
+          return;
+        }
+        d.results.forEach(item => {
+          const el = document.createElement("div");
+          el.className = "dd-item";
+          el.innerHTML = `
+            <div class="dd-name">${item.name}</div>
+            <div class="dd-addr">${item.display_name}</div>
+          `;
+          el.addEventListener("click", () => selectLocation(item));
+          dd.appendChild(el);
+        });
+      } catch (e) {
+        dd.innerHTML = `<div class="dd-item"><div class="dd-name" style="color:var(--danger)">Error: ${e.message}</div></div>`;
+      }
+    }
 
-function handleContourFile(file) {
-  uploadedKmlFile = file;
-  document.getElementById("fileBoxTitle").textContent = `📄 ${file.name}`;
-  document.getElementById("contourActions").style.display = "block";
-  setReady(true);
-  toast(`Uploaded: ${file.name}`, "ok");
-}
+    document.addEventListener("click", e => {
+      if (!e.target.closest(".search-wrap") && !e.target.closest(".map-search-bar")) {
+        document.getElementById("locDropdown").classList.remove("open");
+      }
+    });
 
-document.getElementById("btnEntireContour").addEventListener("click", () => {
-  document.getElementById("btnEntireContour").classList.add("active");
-  document.getElementById("btnSubContour").classList.remove("active");
-  drawnItems.clearLayers(); currentPolygon = null;
-  setReady(true);
-  toast("Will analyze entire contour map", "ok");
-});
-document.getElementById("btnSubContour").addEventListener("click", () => {
-  document.getElementById("btnSubContour").classList.add("active");
-  document.getElementById("btnEntireContour").classList.remove("active");
-  new L.Draw.Polygon(map, drawCtrl.options.draw.polygon).enable();
-  toast("Draw sub-area on map for contour analysis", "ok");
-});
+    let stateHighlightLayer = null;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// AUTO RAINFALL
-// ──────────────────────────────────────────────────────────────────────────────
-async function fetchRainfall(lat, lon) {
-  document.getElementById("rainManual").style.opacity = ".4";
-  document.getElementById("rainLoading").style.display = "block";
-  document.getElementById("rainAutoBox").style.display = "none";
-  try {
-    const r = await fetch(`${API}/api/location/rainfall?lat=${lat}&lon=${lon}&years=5`);
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail);
+    document.getElementById("stateFilter").addEventListener("change", async (e) => {
+      const st = e.target.value;
+      if (stateHighlightLayer) { map.removeLayer(stateHighlightLayer); stateHighlightLayer = null; }
+      if (!st) { map.setView([20.5937, 78.9629], 5); return; }
+      try {
+        const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(st + ', India')}&limit=1`);
+        const d = await r.json();
+        if (d.results && d.results.length) {
+          const item = d.results[0];
+          if (item.bbox) map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[20,20] });
+          else map.setView([item.lat, item.lon], 7);
+          
+          if (item.osm_type && item.osm_id) {
+            try {
+              const br = await fetch(`${API}/api/location/boundary?osm_type=${item.osm_type}&osm_id=${item.osm_id}&q=${encodeURIComponent(st)}`);
+              const bd = await br.json();
+              if (bd.geojson) {
+                stateHighlightLayer = L.geoJSON(bd.geojson, {
+                  style: { color: "#0284c7", fillColor: "#0284c7", fillOpacity: 0.12, weight: 2.5, dashArray: "4, 4" }
+                }).addTo(map);
+              }
+            } catch(err) {}
+          }
+          toast(`State highlighted: ${st}`, "ok");
+        }
+      } catch (err) {}
+    });
 
-    autoRainfall = d.mean_annual_rainfall_mm;
-    document.getElementById("rainAutoVal").textContent   = autoRainfall;
-    document.getElementById("rainAutoBox").style.display = "flex";
-    document.getElementById("rainLoading").style.display = "none";
-    document.getElementById("rainManual").style.opacity  = "1";
+    async function selectLocation(item) {
+      document.getElementById("locDropdown").classList.remove("open");
+      locSearch.value = item.name;
+      mapSearch.value = item.name;
+
+      selectedLat = item.lat; selectedLon = item.lon;
+      selectedOsmType = item.osm_type; selectedOsmId = item.osm_id;
+      selectedName = item.name;
+
+      document.getElementById("selLocCard").style.display = "block";
+      document.getElementById("selLocName").textContent = item.name;
+      document.getElementById("selLocSub").textContent  = item.display_name;
+
+      if (item.bbox) {
+        map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[30,30] });
+      } else {
+        map.setView([item.lat, item.lon], 13);
+      }
+
+      fetchRainfall(item.lat, item.lon);
+      fetchVillageBoundary();
+    }
+
+    async function fetchVillageBoundary() {
+      if (!selectedOsmId) return;
+      showLoader("Fetching village boundary…", "Querying boundary GeoJSON & contours");
+      try {
+        const url = `${API}/api/location/boundary?osm_type=${selectedOsmType}&osm_id=${selectedOsmId}&q=${encodeURIComponent(selectedName)}&lat=${selectedLat}&lon=${selectedLon}`;
+        const r = await fetch(url);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || "Boundary not found");
+
+        drawnItems.clearLayers();
+        const geom = d.geojson;
+        if (geom.type === "Polygon") {
+          const latlngs = geom.coordinates[0].map(c => [c[1], c[0]]);
+          currentPolygon = L.polygon(latlngs, { color:"#047857", fillOpacity:.18, weight:2.5 });
+        } else if (geom.type === "MultiPolygon") {
+          const rings = geom.coordinates.map(poly => poly[0].map(c => [c[1], c[0]]));
+          currentPolygon = L.polygon(rings, { color:"#047857", fillOpacity:.18, weight:2.5 });
+        }
+        drawnItems.addLayer(currentPolygon);
+        map.fitBounds(currentPolygon.getBounds().pad(.05));
+        setReady(true);
+        toast(`Village boundary loaded (${d.source})`, "ok");
+      } catch (e) { toast(`Boundary error: ${e.message}`, "err"); }
+      finally { hideLoader(); }
+    }
+
+    document.getElementById("btnUseBoundary").addEventListener("click", fetchVillageBoundary);
+    document.getElementById("btnDrawOwn").addEventListener("click", () => enableFreehandLasso());
+
+    // CONTOUR UPLOAD
+    const fileBox = document.getElementById("fileDropBox");
+    const fileInput = document.getElementById("contourFileInput");
+    fileBox.addEventListener("click", () => fileInput.click());
+    fileBox.addEventListener("dragover", e => e.preventDefault());
+    fileBox.addEventListener("drop", e => { e.preventDefault(); if (e.dataTransfer.files.length) handleContourFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener("change", e => { if (e.target.files.length) handleContourFile(e.target.files[0]); });
+
+    function handleContourFile(file) {
+      uploadedKmlFile = file;
+      document.getElementById("fileBoxTitle").textContent = `📄 ${file.name}`;
+      document.getElementById("contourActions").style.display = "block";
+      setReady(true);
+      toast(`Uploaded: ${file.name}`, "ok");
+    }
+
+    document.getElementById("btnEntireContour").addEventListener("click", () => {
+      drawnItems.clearLayers(); currentPolygon = null; setReady(true); toast("Analyzing entire contour map", "ok");
+    });
+    document.getElementById("btnSubContour").addEventListener("click", () => enableFreehandLasso());
+
+    // RAINFALL & SLIDERS
+    async function fetchRainfall(lat, lon) {
+      document.getElementById("rainLoading").style.display = "block";
+      try {
+        const r = await fetch(`${API}/api/location/rainfall?lat=${lat}&lon=${lon}&years=5`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail);
+
+        autoRainfall = d.mean_annual_rainfall_mm;
+        document.getElementById("rainAutoVal").textContent   = autoRainfall;
+        document.getElementById("rainAutoBox").style.display = "block";
+        document.getElementById("rainLoading").style.display = "none";
+
+        const sl = document.getElementById("rainSlider");
+        sl.value = Math.min(3000, Math.max(400, Math.round(autoRainfall / 50) * 50));
+        document.getElementById("rainVal").textContent = sl.value;
+      } catch (e) {
+        document.getElementById("rainLoading").style.display = "none";
+      }
+    }
 
     const sl = document.getElementById("rainSlider");
-    sl.value = Math.min(3000, Math.max(400, Math.round(autoRainfall / 50) * 50));
-    document.getElementById("rainVal").textContent = sl.value;
-    updateSlider();
+    sl.addEventListener("input", () => { autoRainfall = null; document.getElementById("rainVal").textContent = sl.value; });
 
-    const rb = document.getElementById("rainBadge");
-    rb.textContent = `🌧 ${autoRainfall} mm/yr (${d.year_range})`;
-    rb.classList.add("show");
-  } catch (e) {
-    document.getElementById("rainLoading").style.display = "none";
-    document.getElementById("rainManual").style.opacity  = "1";
-  }
-}
-
-const sl = document.getElementById("rainSlider");
-function updateSlider() {
-  const pct = ((sl.value - sl.min) / (sl.max - sl.min)) * 100;
-  sl.style.setProperty("--pct", pct + "%");
-  document.getElementById("rainVal").textContent = sl.value;
-}
-sl.addEventListener("input", () => { autoRainfall = null; updateSlider(); });
-updateSlider();
-
-// ──────────────────────────────────────────────────────────────────────────────
-// EXECUTE ANALYSIS
-// ──────────────────────────────────────────────────────────────────────────────
-async function analyze() {
-  clearResultLayers();
-  const numSites = parseInt(document.getElementById("numSites").value);
-  const rainfall = autoRainfall || parseFloat(sl.value);
-
-  if (activeMode === "contour" && uploadedKmlFile) {
-    // Mode A: Upload Contour Map
-    showLoader("Parsing KML contour file…", "Building Delaunay DEM & finding optimal sites");
-    const formData = new FormData();
-    formData.append("contour_map", uploadedKmlFile);
-    
-    try {
-      const url = `${API}/analyzeContour?num_candidates=${numSites}&format=json`;
-      const r = await fetch(url, { method: "POST", body: formData });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Contour analysis failed");
-
-      renderContourResults(d, rainfall);
-      setProg(100);
-      switchTab("results");
-      toast("Contour analysis complete!", "ok");
-    } catch (e) { toast(`Contour error: ${e.message}`, "err"); }
-    finally { hideLoader(); }
-
-  } else {
-    // Mode B: Search Location / Drawn Area
-    if (!currentPolygon) { toast("Draw an area or load a village boundary first", "err"); return; }
-    showLoader("Fetching DEM & D8 Watershed…", "Running SCS-CN runoff & frustum optimization");
-
-    const latlngs = currentPolygon.getLatLngs();
-    const ring = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs[0];
-    const flat  = Array.isArray(ring[0]) ? ring[0] : ring;
-    const coords = flat.map(ll => [ll.lng, ll.lat]);
-    coords.push(coords[0]);
-
-    const payload = {
-      coordinates: coords,
-      mean_annual_rainfall_mm: rainfall,
-      num_candidates: numSites,
-    };
-
-    try {
-      const r = await fetch(`${API}/api/map/analyze-area`, {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify(payload),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || "Area analysis failed");
-
-      renderMapResults(d, rainfall);
-      setProg(100);
-      switchTab("results");
-
-      const cb = document.getElementById("cacheBadge");
-      if (d.cache_hit) { cb.className="fbadge cached show"; cb.textContent="⚡ Cached Result"; }
-      else             { cb.className="fbadge fresh show";  cb.textContent="🔄 Fresh Analysis"; }
-      setTimeout(() => cb.classList.remove("show"), 4000);
-
-      toast("Siting analysis complete!", "ok");
-    } catch(e) { toast(`Error: ${e.message}`, "err"); }
-    finally { hideLoader(); }
-  }
-}
-
-document.getElementById("btnAnalyze").addEventListener("click", analyze);
-document.getElementById("btnAnalyze2").addEventListener("click", analyze);
-
-// ──────────────────────────────────────────────────────────────────────────────
-// RENDER MAP RESULTS
-// ──────────────────────────────────────────────────────────────────────────────
-function renderMapResults(d, rainfall) {
-  resultData = d;
-  const sites = [d.recommended_site, ...(d.alternative_sites || [])];
-
-  document.getElementById("noRes").style.display = "none";
-  document.getElementById("resBox").style.display = "flex";
-
-  renderCandidateList(sites);
-  selectCandidate(0, sites, rainfall);
-  renderMapOverlays(sites, d.map_overlays);
-}
-
-function renderContourResults(d, rainfall) {
-  const summaryTable = d.summary_table || [];
-  const sites = summaryTable.map((item, idx) => ({
-    rank: item.rank,
-    status: item.status,
-    location: { lat: item.latitude, lon: item.longitude },
-    elevation_m: item.elevation_m || 270,
-    slope_pct: item.slope_pct || 1.2,
-    land_type: item.land_use || "cropland",
-    suitability_score: item.score || 0.9,
-    catchment: { area_ha: item.catchment_ha || 8.5 },
-    hydrology: { mean_annual_rainfall_mm: rainfall, annual_runoff_volume_m3: (item.catchment_ha || 8.5) * rainfall * 65 },
-    pond_sizing: {
-      recommended_depth_m: 3.0,
-      total_depth_m: 3.5,
-      top_length_m: 60.0, top_width_m: 40.0,
-      bottom_length_m: 51.0, bottom_width_m: 31.0,
-      storage_capacity_m3: item.recommended_volume_m3 || 5500,
-      capture_efficiency_pct: 92,
-    }
-  }));
-
-  renderCandidateList(sites);
-  selectCandidate(0, sites, rainfall);
-  renderMapOverlays(sites, null);
-}
-
-function renderCandidateList(sites) {
-  const container = document.getElementById("candidateList");
-  container.innerHTML = sites.map((s, idx) => {
-    const col = CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length];
-    const isTop = idx === 0;
-    return `
-      <div class="cand-card ${isTop ? 'active' : ''}" data-idx="${idx}" onclick="onCandidateClick(${idx})">
-        <div class="cand-head">
-          <span class="cand-title" style="color:${col.pin}">Rank #${s.rank || (idx+1)}: ${isTop ? '★ Recommended Site' : 'Alternative Site'}</span>
-          <span class="cand-badge ${isTop ? 'bg' : 'bb'}">${s.catchment?.area_ha || '—'} ha</span>
-        </div>
-        <div style="font-size:.73rem;color:var(--muted)">
-          Lat/Lon: ${s.location.lat.toFixed(4)}, ${s.location.lon.toFixed(4)} • Slope: ${s.slope_pct}% • Yield: ${fN(s.hydrology?.annual_runoff_volume_m3)} m³
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-window.onCandidateClick = function(idx) {
-  document.querySelectorAll(".cand-card").forEach((c, i) => c.classList.toggle("active", i === idx));
-  const sites = [resultData.recommended_site, ...(resultData.alternative_sites || [])];
-  selectCandidate(idx, sites, autoRainfall || parseFloat(sl.value));
-};
-
-function selectCandidate(idx, sites, rainfall) {
-  selectedCandidateIndex = idx;
-  const site = sites[idx] || sites[0];
-  const pond = site.pond_sizing || {};
-  const soilSel = document.getElementById("soilGroup").value;
-  const soilText = soilSel.replace("HSG_", "Group ") + " Soil";
-
-  document.getElementById("selSiteTitle").textContent = site.status || `Candidate Site #${idx+1}`;
-  document.getElementById("rLoc").textContent   = `${site.location.lat.toFixed(5)}, ${site.location.lon.toFixed(5)}`;
-  document.getElementById("rElev").textContent  = `${site.elevation_m || '—'} m`;
-  document.getElementById("rSlope").textContent = `${site.slope_pct}%`;
-  document.getElementById("rSoil").textContent  = soilText;
-  document.getElementById("rLand").textContent  = (site.land_type || 'cropland').replace(/_/g," ");
-  document.getElementById("rSuit").innerHTML    = `<span class="badge bg">${((site.suitability_score || 0.9)*100).toFixed(0)}%</span>`;
-
-  document.getElementById("sCatch").textContent = site.catchment?.area_ha || "—";
-  document.getElementById("sWater").textContent = fN(site.hydrology?.annual_runoff_volume_m3);
-  document.getElementById("sDepth").textContent = `${pond.recommended_depth_m || 3.0} m`;
-  document.getElementById("sSurf").textContent  = fN(pond.recommended_surface_area_m2 || (pond.top_length_m * pond.top_width_m));
-
-  document.getElementById("xDepth").textContent = `${pond.recommended_depth_m || 3.0} m`;
-  document.getElementById("xTotal").textContent = `${pond.total_depth_m || 3.5} m`;
-  document.getElementById("xTop").textContent   = `${pond.top_length_m} m × ${pond.top_width_m} m`;
-  document.getElementById("xBot").textContent   = `${pond.bottom_length_m} m × ${pond.bottom_width_m} m`;
-  document.getElementById("xVol").textContent   = `${fN(pond.storage_capacity_m3)} m³`;
-  document.getElementById("xStore").textContent = `${fN(pond.storage_capacity_m3)} m³ (${pond.capture_efficiency_pct || 90}% efficiency)`;
-
-  // Pond specs tab
-  document.getElementById("noPond").style.display = "none";
-  document.getElementById("pondBox").style.display = "flex";
-  document.getElementById("pDep").textContent   = `${pond.recommended_depth_m} m`;
-  document.getElementById("pTot").textContent   = `${pond.total_depth_m} m`;
-  document.getElementById("pTop").textContent   = `${pond.top_length_m} m × ${pond.top_width_m} m`;
-  document.getElementById("pBot").textContent   = `${pond.bottom_length_m} m × ${pond.bottom_width_m} m`;
-  document.getElementById("pStore").textContent = `${fN(pond.storage_capacity_m3)} m³`;
-  document.getElementById("pRun").textContent   = `${fN(site.hydrology?.annual_runoff_volume_m3)} m³`;
-  document.getElementById("pCap").textContent   = `${pond.capture_efficiency_pct || 90}%`;
-  document.getElementById("pRain").textContent  = `${rainfall} mm/yr`;
-  document.getElementById("pCatch").textContent = `${site.catchment?.area_ha} ha`;
-
-  map.panTo([site.location.lat, site.location.lon]);
-}
-
-function renderMapOverlays(sites, overlays) {
-  clearResultLayers();
-
-  if (overlays?.pond_polygon) {
-    resultLayers.push(L.geoJSON(overlays.pond_polygon, { style:{ color:"#1a7a5e", fillColor:"#1a7a5e", fillOpacity:.5, weight:2 } }).addTo(map));
-  }
-
-  sites.forEach((s, idx) => {
-    const col = CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length];
-    const isTop = idx === 0;
-
-    const icon = L.divIcon({
-      className: "",
-      html: `<div style="position:relative;width:${isTop?36:28}px;height:${isTop?36:28}px">
-        ${isTop ? `<div style="position:absolute;inset:-4px;background:${col.pin};border-radius:50%;opacity:.3;animation:pu 1.5s infinite"></div>` : ''}
-        <div style="position:absolute;inset:0;background:${col.pin};border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:${isTop?11:10}px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.3)">${idx+1}</div>
-      </div>`,
-      iconSize: [isTop?36:28, isTop?36:28],
-      iconAnchor: [isTop?18:14, isTop?18:14]
+    const numSitesSl = document.getElementById("numSites");
+    numSitesSl.addEventListener("change", () => {
+      document.getElementById("numSitesVal").textContent = `K = ${numSitesSl.value}`;
+      document.getElementById("resCount").textContent = numSitesSl.value;
     });
 
-    const marker = L.marker([s.location.lat, s.location.lon], { icon }).addTo(map);
-    marker.bindPopup(`
-      <div class="pp-t">${s.status || 'Candidate Site #' + (idx+1)}</div>
-      <div class="pp-r"><span>Catchment</span><span>${s.catchment?.area_ha} ha</span></div>
-      <div class="pp-r"><span>Slope</span><span>${s.slope_pct}%</span></div>
-      <div class="pp-r"><span>Water Yield</span><span>${fN(s.hydrology?.annual_runoff_volume_m3)} m³</span></div>
-      <div class="pp-r"><span>Dig Depth</span><span>${s.pond_sizing?.recommended_depth_m} m</span></div>
-    `);
-    marker.on("click", () => onCandidateClick(idx));
-    resultLayers.push(marker);
+    // EXECUTE ANALYSIS
+    async function analyze() {
+      clearResultLayers();
+      const numSites = parseInt(numSitesSl.value);
+      const rainfall = autoRainfall || parseFloat(sl.value);
 
-    // Add Catchment boundary dots
-    const cg = s.catchment?.boundary_geojson;
-    if (cg?.geometry?.coordinates?.length) {
-      resultLayers.push(
-        L.geoJSON(cg, { pointToLayer: (_,ll) => L.circleMarker(ll, { radius:2, color:col.pin, fillColor:col.pin, fillOpacity:.4, weight:0 }) }).addTo(map)
-      );
+      if (activeMode === "contour" && uploadedKmlFile) {
+        showLoader("Parsing KML contour file…", "Building Delaunay DEM & finding optimal sites");
+        const formData = new FormData();
+        formData.append("contour_map", uploadedKmlFile);
+
+        let contourUrl = `${API}/analyzeContour?num_candidates=${numSites}&format=json`;
+        if (currentPolygon && drawnShapeType !== "circle") {
+          const cLatLngs = currentPolygon.getLatLngs();
+          const cRing = Array.isArray(cLatLngs[0]) ? cLatLngs[0] : cLatLngs[0];
+          const cFlat = Array.isArray(cRing[0]) ? cRing[0] : cRing;
+          const areaCoords = cFlat.map(ll => [ll.lng, ll.lat]);
+          areaCoords.push(areaCoords[0]);
+          contourUrl += `&shape_type=custom&area_coords=${encodeURIComponent(JSON.stringify(areaCoords))}`;
+        }
+
+        try {
+          const r = await fetch(contourUrl, { method: "POST", body: formData });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || "Contour analysis failed");
+          renderContourResults(d, rainfall);
+          switchTab("results");
+          toast("Contour analysis complete!", "ok");
+        } catch (e) { toast(`Contour error: ${e.message}`, "err"); }
+        finally { hideLoader(); }
+
+      } else {
+        if (!currentPolygon) { toast("Draw an area or search a village boundary first", "err"); return; }
+        showLoader("Fetching DEM & D8 Watershed…", "Running SCS-CN runoff & frustum optimization");
+
+        let coords;
+        if (drawnShapeType === "circle" && drawnCircleCenter) {
+          const cLat = drawnCircleCenter.lat, cLng = drawnCircleCenter.lng;
+          const R = 6371000, rM = drawnCircleRadius;
+          coords = [];
+          for (let i = 0; i <= 32; i++) {
+            const angle = (2 * Math.PI * i) / 32;
+            const dLat = (rM * Math.cos(angle)) / R * (180 / Math.PI);
+            const dLng = (rM * Math.sin(angle)) / (R * Math.cos(cLat * Math.PI / 180)) * (180 / Math.PI);
+            coords.push([cLng + dLng, cLat + dLat]);
+          }
+        } else {
+          const latlngs = currentPolygon.getLatLngs();
+          const ring = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs[0];
+          const flat  = Array.isArray(ring[0]) ? ring[0] : ring;
+          coords = flat.map(ll => [ll.lng, ll.lat]);
+          coords.push(coords[0]);
+        }
+
+        const payload = {
+          coordinates: coords,
+          mean_annual_rainfall_mm: rainfall,
+          num_candidates: numSites,
+          shape_type: drawnShapeType === "circle" ? "circle" : "polygon",
+        };
+        if (drawnShapeType === "circle" && drawnCircleRadius) payload.radius_m = drawnCircleRadius;
+
+        try {
+          const r = await fetch(`${API}/api/map/analyze-area`, {
+            method: "POST",
+            headers: { "Content-Type":"application/json" },
+            body: JSON.stringify(payload),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.detail || "Area analysis failed");
+
+          renderMapResults(d, rainfall);
+          switchTab("results");
+          toast("Siting analysis complete!", "ok");
+        } catch(e) { toast(`Error: ${e.message}`, "err"); }
+        finally { hideLoader(); }
+      }
     }
-  });
-}
 
-// ──────────────────────────────────────────────────────────────────────────────
-// CLEAR & RESET
-// ──────────────────────────────────────────────────────────────────────────────
-document.getElementById("btnClear").addEventListener("click", () => {
-  drawnItems.clearLayers(); clearResultLayers();
-  currentPolygon = null; uploadedKmlFile = null; selectedLat = null; autoRainfall = null; resultData = null;
-  setReady(false); setProg(0);
-  document.getElementById("selLocCard").style.display = "none";
-  document.getElementById("contourActions").style.display = "none";
-  document.getElementById("fileBoxTitle").textContent = "Click or Drag & Drop KML File";
-  document.getElementById("rainAutoBox").style.display = "none";
-  document.getElementById("rainLoading").style.display = "none";
-  document.getElementById("rainManual").style.opacity = "1";
-  ["noRes","noPond"].forEach(id => document.getElementById(id).style.display = "block");
-  ["resBox","pondBox"].forEach(id => { const e = document.getElementById(id); if(e) e.style.display="none"; });
-  document.getElementById("rainBadge").classList.remove("show");
-  document.getElementById("cacheBadge").classList.remove("show");
-  switchTab("draw"); toast("Map cleared", "ok");
-});
+    document.getElementById("btnAnalyze").addEventListener("click", analyze);
+    document.getElementById("btnAnalyze2").addEventListener("click", analyze);
 
-function clearResultLayers() { resultLayers.forEach(l => map.removeLayer(l)); resultLayers = []; }
+    // RENDER RESULTS
+    function renderMapResults(d, rainfall) {
+      resultData = d;
+      const sites = [d.recommended_site, ...(d.alternative_sites || [])];
+      document.getElementById("noRes").style.display = "none";
+      document.getElementById("resBox").style.display = "flex";
+      renderCandidateList(sites);
+      selectCandidate(0, sites, rainfall);
+      renderMapOverlays(sites, d.map_overlays);
+    }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// UI HELPERS
-// ──────────────────────────────────────────────────────────────────────────────
-function switchTab(t) {
-  document.querySelectorAll(".step").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
-  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === `tab-${t}`));
-}
-document.querySelectorAll(".step").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+    function renderContourResults(d, rainfall) {
+      const summaryTable = d.summary_table || [];
+      const sites = summaryTable.map((item, idx) => ({
+        rank: item.rank,
+        status: item.status,
+        location: { lat: item.latitude, lon: item.longitude },
+        elevation_m: item.elevation_m || 270,
+        slope_pct: item.slope_pct || 1.2,
+        land_type: item.land_use || "cropland",
+        suitability_score: item.score || 0.9,
+        catchment: { area_ha: item.catchment_ha || 8.5 },
+        hydrology: { mean_annual_rainfall_mm: rainfall, annual_runoff_volume_m3: (item.catchment_ha || 8.5) * rainfall * 65 },
+        pond_sizing: {
+          recommended_depth_m: 3.0, total_depth_m: 3.5,
+          top_length_m: 60.0, top_width_m: 40.0,
+          bottom_length_m: 51.0, bottom_width_m: 31.0,
+          storage_capacity_m3: item.recommended_volume_m3 || 5500,
+          capture_efficiency_pct: 92,
+        }
+      }));
 
-function setProg(pct) { document.getElementById("pf").style.width = pct + "%"; }
+      renderCandidateList(sites);
+      selectCandidate(0, sites, rainfall);
+      renderMapOverlays(sites, null);
+    }
 
-function showLoader(m, s) {
-  document.getElementById("ldrM").textContent = m;
-  document.getElementById("ldrS").textContent = s || "";
-  document.getElementById("loader").classList.add("on");
-}
-function hideLoader() { document.getElementById("loader").classList.remove("on"); }
+    function renderCandidateList(sites) {
+      const container = document.getElementById("candidateList");
+      container.innerHTML = sites.map((s, idx) => {
+        const col = CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length];
+        const isTop = idx === 0;
+        const score = ((s.suitability_score || 0.86) * (isTop ? 1 : 0.85 - idx*0.1)).toFixed(2);
+        return `
+          <div class="cand-item ${isTop ? 'active' : ''}" onclick="onCandidateClick(${idx})">
+            <div class="cand-head">
+              <div class="cand-title" style="color:${col.pin}">Site ${idx+1} — ${isTop ? 'High Suitability' : 'Good Suitability'}</div>
+              <div class="cand-score">${score}</div>
+            </div>
+            <div class="cand-coords">📍 ${s.location.lat.toFixed(4)}° N, ${s.location.lon.toFixed(4)}° E</div>
+            <div class="cand-metrics">
+              <div><span class="metric-lbl">Catchment Area:</span> <span class="metric-val">${s.catchment?.area_ha || 42.5} ha</span></div>
+              <div><span class="metric-lbl">Est. Inflow:</span> <span class="metric-val">${fN(s.hydrology?.annual_runoff_volume_m3)} m³</span></div>
+            </div>
+            <div class="cand-actions">
+              <button class="btn" style="flex:1;font-size:.7rem" onclick="event.stopPropagation(); openSiteModal(${idx})">View Details</button>
+              <button class="btn btn-primary" style="flex:1;font-size:.7rem" onclick="event.stopPropagation(); openSiteModal(${idx})">Use This Site →</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
 
-function toast(msg, type="") {
-  const el = document.getElementById("toast");
-  el.textContent = msg; el.className = `show ${type}`;
-  setTimeout(() => el.className = "", 3000);
-}
+    window.openSiteModal = function(idx) {
+      onCandidateClick(idx);
+      const sites = [resultData.recommended_site, ...(resultData.alternative_sites || [])];
+      const site = sites[idx] || sites[0];
+      const pond = site.pond_sizing || {};
+      const rainfall = autoRainfall || parseFloat(document.getElementById("rainSlider").value);
+      const soilText = document.getElementById("soilGroup").value.replace("HSG_","Group ") + " Soil";
+      const isTop = idx === 0;
 
-function fN(n) {
-  if (n==null) return "—";
-  if (n>=1e6) return (n/1e6).toFixed(2)+"M";
-  if (n>=1e3) return (n/1e3).toFixed(1)+"K";
-  return n.toFixed(0);
-}
+      document.getElementById("mSiteTitle").textContent = `📍 Candidate Site #${idx+1} — ${isTop ? 'High Suitability' : 'Good Suitability'}`;
+      document.getElementById("mCoords").textContent = `${site.location.lat.toFixed(5)}° N, ${site.location.lon.toFixed(5)}° E`;
+      document.getElementById("mScore").textContent  = `${((site.suitability_score || 0.86)*(isTop?1:0.85 - idx*0.1)*100).toFixed(0)}%`;
 
-// ──────────────────────────────────────────────────────────────────────────────
-// THEME
-// ──────────────────────────────────────────────────────────────────────────────
-const themeBtn = document.getElementById("themeBtn");
-function setTheme(dark) {
-  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-  themeBtn.textContent = dark ? "☀️" : "🌙";
-  localStorage.setItem("jsTheme", dark ? "dark" : "light");
-}
-themeBtn.addEventListener("click", () => setTheme(document.documentElement.getAttribute("data-theme") !== "dark"));
-setTheme(localStorage.getItem("jsTheme") === "dark");
-</script>
+      document.getElementById("mElev").textContent  = `${site.elevation_m || 270} m`;
+      document.getElementById("mSlope").textContent = `${site.slope_pct}%`;
+      document.getElementById("mSoil").textContent  = soilText;
+      document.getElementById("mLand").textContent  = (site.land_type || 'cropland').replace(/_/g," ");
+
+      document.getElementById("mCatch").textContent = `${site.catchment?.area_ha || 42.5} ha`;
+      document.getElementById("mRain").textContent  = `${rainfall} mm/yr`;
+      document.getElementById("mYield").textContent = `${fN(site.hydrology?.annual_runoff_volume_m3)} m³`;
+
+      document.getElementById("mDep").textContent   = `${pond.recommended_depth_m || 3.0} m`;
+      document.getElementById("mTot").textContent   = `${pond.total_depth_m || 3.5} m`;
+      document.getElementById("mTop").textContent   = `${pond.top_length_m || 60}m × ${pond.top_width_m || 40}m`;
+      document.getElementById("mBot").textContent   = `${pond.bottom_length_m || 51}m × ${pond.bottom_width_m || 31}m`;
+      document.getElementById("mVol").textContent   = `${fN(pond.storage_capacity_m3 || 5500)} m³`;
+      document.getElementById("mCap").textContent   = `${pond.capture_efficiency_pct || 90}%`;
+
+      document.getElementById("siteModal").classList.add("open");
+    };
+
+    function closeSiteModal() {
+      document.getElementById("siteModal").classList.remove("open");
+    }
+
+    document.getElementById("btnCloseModal").addEventListener("click", closeSiteModal);
+    document.getElementById("btnDismissModal").addEventListener("click", closeSiteModal);
+    document.getElementById("btnConfirmSite").addEventListener("click", () => {
+      closeSiteModal();
+      toast(`Site #${selectedCandidateIndex + 1} confirmed for design!`, "ok");
+      switchTab("pond");
+    });
+    document.getElementById("siteModal").addEventListener("click", e => {
+      if (e.target.id === "siteModal") closeSiteModal();
+    });
+
+    window.onCandidateClick = function(idx) {
+      document.querySelectorAll(".cand-item").forEach((c, i) => c.classList.toggle("active", i === idx));
+      const sites = [resultData.recommended_site, ...(resultData.alternative_sites || [])];
+      selectCandidate(idx, sites, autoRainfall || parseFloat(sl.value));
+    };
+
+    function selectCandidate(idx, sites, rainfall) {
+      selectedCandidateIndex = idx;
+      const site = sites[idx] || sites[0];
+      const pond = site.pond_sizing || {};
+
+      document.getElementById("selSiteTitle").textContent = site.status || `Recommended Site #${idx+1}`;
+      document.getElementById("rLoc").textContent   = `Lat/Lon: ${site.location.lat.toFixed(5)}, ${site.location.lon.toFixed(5)}`;
+      document.getElementById("rElev").textContent  = `${site.elevation_m || 270} m`;
+      document.getElementById("rSlope").textContent = `${site.slope_pct}%`;
+      document.getElementById("rSoil").textContent  = document.getElementById("soilGroup").value.replace("HSG_","Group ") + " Soil";
+      document.getElementById("rSuit").textContent  = `${((site.suitability_score || 0.86)*100).toFixed(0)}%`;
+
+      document.getElementById("xDepth").textContent = `${pond.recommended_depth_m || 3.0} m`;
+      document.getElementById("xTotal").textContent = `${pond.total_depth_m || 3.5} m`;
+      document.getElementById("xTop").textContent   = `${pond.top_length_m}m × ${pond.top_width_m}m`;
+      document.getElementById("xBot").textContent   = `${pond.bottom_length_m}m × ${pond.bottom_width_m}m`;
+      document.getElementById("xVol").textContent   = `${fN(pond.storage_capacity_m3)} m³`;
+      document.getElementById("xStore").textContent = `${pond.capture_efficiency_pct || 90}%`;
+
+      document.getElementById("pDep").textContent   = `${pond.recommended_depth_m} m`;
+      document.getElementById("pTot").textContent   = `${pond.total_depth_m} m`;
+      document.getElementById("pTop").textContent   = `${pond.top_length_m}m × ${pond.top_width_m}m`;
+      document.getElementById("pBot").textContent   = `${pond.bottom_length_m}m × ${pond.bottom_width_m}m`;
+      document.getElementById("pStore").textContent = `${fN(pond.storage_capacity_m3)} m³`;
+      document.getElementById("pRun").textContent   = `${fN(site.hydrology?.annual_runoff_volume_m3)} m³`;
+
+      map.panTo([site.location.lat, site.location.lon]);
+    }
+
+    function renderMapOverlays(sites, overlays) {
+      clearResultLayers();
+      if (overlays?.pond_polygon) {
+        resultLayers.push(L.geoJSON(overlays.pond_polygon, { style:{ color:"#047857", fillColor:"#047857", fillOpacity:.5, weight:2 } }).addTo(map));
+      }
+      sites.forEach((s, idx) => {
+        const col = CANDIDATE_COLORS[idx % CANDIDATE_COLORS.length];
+        const isTop = idx === 0;
+        const icon = L.divIcon({
+          className: "",
+          html: `<div style="position:relative;width:${isTop?34:26}px;height:${isTop?34:26}px">
+            <div style="position:absolute;inset:0;background:${col.pin};border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.3)">${idx+1}</div>
+          </div>`,
+          iconSize: [isTop?34:26, isTop?34:26],
+          iconAnchor: [isTop?17:13, isTop?17:13]
+        });
+        const marker = L.marker([s.location.lat, s.location.lon], { icon }).addTo(map);
+        marker.on("click", () => onCandidateClick(idx));
+        resultLayers.push(marker);
+      });
+    }
+
+    // CLEAR & RESET
+    document.getElementById("btnClear").addEventListener("click", () => {
+      drawnItems.clearLayers(); clearResultLayers();
+      currentPolygon = null; uploadedKmlFile = null; selectedLat = null; autoRainfall = null; resultData = null;
+      setReady(false);
+      document.getElementById("selLocCard").style.display = "none";
+      document.getElementById("contourActions").style.display = "none";
+      document.getElementById("fileBoxTitle").textContent = "Click or Drag & Drop KML File";
+      document.getElementById("noRes").style.display = "block";
+      document.getElementById("resBox").style.display = "none";
+      switchTab("draw"); toast("Map cleared", "ok");
+    });
+
+    function clearResultLayers() { resultLayers.forEach(l => map.removeLayer(l)); resultLayers = []; }
+
+    // HELPERS
+    function switchTab(t) {
+      document.querySelectorAll(".step-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
+      document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === `tab-${t}`));
+    }
+    document.querySelectorAll(".step-btn").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+    function showLoader(m, s) {
+      document.getElementById("ldrM").textContent = m;
+      document.getElementById("ldrS").textContent = s || "";
+      document.getElementById("loader").classList.add("on");
+    }
+    function hideLoader() { document.getElementById("loader").classList.remove("on"); }
+
+    function toast(msg, type="") {
+      const el = document.getElementById("toast");
+      el.textContent = msg; el.className = `show ${type}`;
+      setTimeout(() => el.className = "", 3000);
+    }
+
+    function fN(n) {
+      if (n==null) return "—";
+      if (n>=1e6) return (n/1e6).toFixed(2)+"M";
+      if (n>=1e3) return (n/1e3).toFixed(1)+"K";
+      return n.toFixed(0);
+    }
+
+    // THEME
+    const themeBtn = document.getElementById("themeBtn");
+    function setTheme(dark) {
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      themeBtn.textContent = dark ? "☀️" : "🌙";
+      localStorage.setItem("jsTheme", dark ? "dark" : "light");
+    }
+    themeBtn.addEventListener("click", () => setTheme(document.documentElement.getAttribute("data-theme") !== "dark"));
+    setTheme(localStorage.getItem("jsTheme") === "dark");
+  </script>
 </body>
 </html>
