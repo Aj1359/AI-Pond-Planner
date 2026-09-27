@@ -16,10 +16,13 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── DARK MODE (default) ── */
     :root {
       --bg: #0a0f1e;
       --surface: #111827;
       --surface2: #1a2235;
+      --header-bg1: #0f172a;
+      --header-bg2: #1e293b;
       --border: rgba(99,179,237,0.15);
       --accent: #3b82f6;
       --accent2: #06b6d4;
@@ -29,6 +32,30 @@
       --text: #e2e8f0;
       --muted: #94a3b8;
       --pond-blue: #0ea5e9;
+      --input-bg: rgba(255,255,255,0.05);
+      --toolbar-bg: var(--surface);
+      --popup-bg: var(--surface2);
+    }
+
+    /* ── LIGHT MODE ── */
+    [data-theme="light"] {
+      --bg: #f5f5f0;
+      --surface: #ffffff;
+      --surface2: #f0f0eb;
+      --header-bg1: #e8e8e2;
+      --header-bg2: #d8d8d2;
+      --border: rgba(59,130,246,0.18);
+      --accent: #2563eb;
+      --accent2: #0891b2;
+      --success: #059669;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --text: #1e293b;
+      --muted: #64748b;
+      --pond-blue: #0284c7;
+      --input-bg: rgba(0,0,0,0.04);
+      --toolbar-bg: #ffffff;
+      --popup-bg: #ffffff;
     }
 
     body {
@@ -39,6 +66,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      transition: background 0.3s, color 0.3s;
     }
 
     /* ── HEADER ── */
@@ -47,14 +75,41 @@
       align-items: center;
       gap: 1rem;
       padding: 0.75rem 1.5rem;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      background: linear-gradient(135deg, var(--header-bg1) 0%, var(--header-bg2) 100%);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       z-index: 1000;
+      transition: background 0.3s;
     }
     .logo { font-size: 1.4rem; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .logo-sub { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
-    .header-actions { margin-left: auto; display: flex; gap: 0.5rem; }
+    .header-actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+
+    /* ── THEME TOGGLE ── */
+    .theme-toggle {
+      position: relative;
+      width: 52px; height: 26px;
+      cursor: pointer;
+    }
+    .theme-toggle input { opacity: 0; width: 0; height: 0; }
+    .theme-slider {
+      position: absolute; inset: 0;
+      background: #334155;
+      border-radius: 999px;
+      transition: background 0.3s;
+      display: flex; align-items: center; padding: 3px;
+    }
+    .theme-slider::before {
+      content: '';
+      width: 20px; height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s;
+      flex-shrink: 0;
+    }
+    .theme-toggle input:checked + .theme-slider { background: #bfdbfe; }
+    .theme-toggle input:checked + .theme-slider::before { transform: translateX(26px); background: #1e40af; }
+    .theme-icon { font-size: 0.9rem; margin: 0 4px; user-select: none; }
 
     /* ── MAIN LAYOUT ── */
     .app-body { display: flex; flex: 1; overflow: hidden; }
@@ -95,7 +150,7 @@
     .input-row { display: flex; flex-direction: column; gap: 0.35rem; }
     .input-label { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
     input[type=text], input[type=number], select {
-      background: rgba(255,255,255,0.05);
+      background: var(--input-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
@@ -186,7 +241,7 @@
       padding: 0.5rem 1rem; display: flex; gap: 0.5rem; align-items: center;
       z-index: 800; box-shadow: 0 4px 24px rgba(0,0,0,0.5);
     }
-    .map-toolbar select, .map-toolbar input { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.8rem; font-family: inherit; }
+    .map-toolbar select, .map-toolbar input { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; font-size: 0.8rem; font-family: inherit; transition: background 0.3s; }
 
     /* ── SCROLLBAR ── */
     ::-webkit-scrollbar { width: 6px; }
@@ -225,6 +280,12 @@
     <div class="logo-sub">Smart Watershed Analysis System</div>
   </div>
   <div class="header-actions">
+    <span class="theme-icon">🌙</span>
+    <label class="theme-toggle" title="Toggle light / dark mode">
+      <input type="checkbox" id="themeToggle" />
+      <span class="theme-slider"></span>
+    </label>
+    <span class="theme-icon">☀️</span>
     <button class="btn btn-outline" id="btnClearMap">🗑 Clear Map</button>
     <button class="btn btn-primary" id="btnAnalyze" disabled>⚡ Analyze Area</button>
   </div>
@@ -697,6 +758,34 @@ document.getElementById("btnClearMap").addEventListener("click", () => {
   document.getElementById("noPond").style.display = "block";
   switchTab("draw");
   toast("Map cleared", "info");
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// THEME TOGGLE
+// ─────────────────────────────────────────────────────────────────────
+(function initTheme() {
+  const saved = localStorage.getItem('pondTheme') || 'dark';
+  if (saved === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeToggle').checked = true;
+  }
+})();
+
+document.getElementById('themeToggle').addEventListener('change', function() {
+  const isLight = this.checked;
+  document.documentElement.setAttribute('data-theme', isLight ? 'light' : 'dark');
+  localStorage.setItem('pondTheme', isLight ? 'light' : 'dark');
+
+  // Swap map tile layer to match theme
+  if (isLight) {
+    Object.values(LAYERS).forEach(l => map.removeLayer(l));
+    LAYERS.osm.addTo(map);
+    document.getElementById('layerSelect').value = 'osm';
+  } else {
+    Object.values(LAYERS).forEach(l => map.removeLayer(l));
+    LAYERS.satellite.addTo(map);
+    document.getElementById('layerSelect').value = 'satellite';
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────
