@@ -14,6 +14,7 @@ from app.services import geocode as geo_svc
 from app.services import terrain as terrain_svc
 from app.services import sites as sites_svc
 from app.services import runoff as runoff_svc
+from app import cache as cache_svc
 
 router = APIRouter(prefix="/api/map", tags=["Map Analysis"])
 
@@ -142,6 +143,13 @@ async def analyze_area(req: PolygonAnalysisRequest):
     bbox = geo_svc.polygon_bbox(req.coordinates)
     centroid_lat, centroid_lon = geo_svc.polygon_centroid(req.coordinates)
 
+    # ── Cache lookup ──────────────────────────────────────────────────
+    cache_key = cache_svc.make_cache_key(bbox, req.mean_annual_rainfall_mm, req.num_candidates)
+    cached = cache_svc.get(cache_key)
+    if cached:
+        cached["cache_hit"] = True
+        return cached
+
     try:
         results, dem_meta = _run_full_pipeline(
             bbox, req.coordinates, req.mean_annual_rainfall_mm, req.num_candidates
@@ -152,9 +160,10 @@ async def analyze_area(req: PolygonAnalysisRequest):
     if not results:
         raise HTTPException(422, "No suitable pond sites found within the selected area. Try a larger area.")
 
+
     recommended = results[0]
 
-    return {
+    response = {
         "polygon_bbox": bbox,
         "centroid": {"lat": centroid_lat, "lon": centroid_lon},
         "dem_source": dem_meta["source"],
@@ -163,6 +172,7 @@ async def analyze_area(req: PolygonAnalysisRequest):
         "recommended_site": recommended,
         "alternative_sites": results[1:],
         "all_sites": results,
+        "cache_hit": False,
         # Pre-built map overlay payload
         "map_overlays": {
             "pond_marker": {
@@ -187,6 +197,12 @@ async def analyze_area(req: PolygonAnalysisRequest):
             "storage_capacity_m3": recommended["pond_sizing"]["storage_capacity_m3"],
         }
     }
+
+    # ── Save to cache (async-fire-and-forget style) ───────────────────
+    cache_svc.set(cache_key, response)
+
+    return response
+
 
 
 def _pond_polygon(site: dict) -> dict:
