@@ -538,6 +538,7 @@
 
       <!-- Floating Basemap Selector -->
       <div class="map-basemap-bar">
+        <button class="map-bm-btn" data-layer="canvas">Clean Canvas</button>
         <button class="map-bm-btn" data-layer="osm">Street</button>
         <button class="map-bm-btn active" data-layer="sat">Satellite</button>
       </div>
@@ -710,10 +711,17 @@
     </div>
   </div>
 
+  <!-- Loader Modal Overlay -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div id="ldrM" style="font-weight:700;font-size:1rem;margin-top:.5rem">Analyzing…</div>
+    <div id="ldrS" style="font-size:.8rem;color:#94a3b8">Running terrain optimization</div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script>
-    const API = "http://localhost:3000";
+    const API = "";
 
     // MAP SETUP
     const map = L.map("map", { center: [20.5937, 78.9629], zoom: 5, zoomControl: false });
@@ -721,6 +729,7 @@
     const LAYERS = {
       sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "Esri Satellite", maxZoom: 19 }),
       osm: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 }),
+      canvas: L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { attribution: "© CartoDB Light", maxZoom: 19 }),
     };
     LAYERS.sat.addTo(map);
 
@@ -771,12 +780,33 @@
     document.getElementById("btnModeSearch").addEventListener("click", () => setMode("search"));
     document.getElementById("btnModeContour").addEventListener("click", () => setMode("contour"));
 
+    let contourBounds = null;
+
     function setMode(mode) {
       activeMode = mode;
       document.getElementById("btnModeSearch").classList.toggle("active", mode === "search");
       document.getElementById("btnModeContour").classList.toggle("active", mode === "contour");
       document.getElementById("sectionSearch").style.display  = mode === "search" ? "block" : "none";
       document.getElementById("sectionContour").style.display = mode === "contour" ? "block" : "none";
+
+      if (mode === "contour") {
+        if (contourBounds) {
+          map.fitBounds(contourBounds, { padding: [30, 30] });
+          toast("Contour Map view focused front & center", "ok");
+        } else if (uploadedKmlFile) {
+          loadAndRenderContourMap(uploadedKmlFile);
+        } else {
+          toast("Upload a KML contour file to render your map front & center!", "ok");
+        }
+      } else {
+        if (currentPolygon) {
+          map.fitBounds(currentPolygon.getBounds().pad(.05));
+        } else if (selectedLat && selectedLon) {
+          map.setView([selectedLat, selectedLon], 13);
+        } else {
+          map.setView([20.5937, 78.9629], 5);
+        }
+      }
       switchTab("draw");
     }
 
@@ -939,34 +969,47 @@
       }
     });
 
+    const STATE_COORDS = {
+      "Andhra Pradesh": [[12.6, 76.7], [19.9, 84.8]],
+      "Arunachal Pradesh": [[26.6, 91.5], [29.5, 97.4]],
+      "Assam": [[24.1, 89.7], [28.0, 96.0]],
+      "Bihar": [[24.3, 83.3], [27.5, 88.3]],
+      "Chhattisgarh": [[17.8, 80.2], [24.1, 84.4]],
+      "Goa": [[14.9, 73.6], [15.8, 74.3]],
+      "Gujarat": [[20.1, 68.1], [24.7, 74.5]],
+      "Haryana": [[27.6, 74.4], [30.9, 77.6]],
+      "Himachal Pradesh": [[30.3, 75.5], [33.2, 79.0]],
+      "Jharkhand": [[21.9, 83.3], [25.3, 87.9]],
+      "Karnataka": [[11.5, 74.0], [18.4, 78.6]],
+      "Kerala": [[8.3, 74.8], [12.8, 77.4]],
+      "Madhya Pradesh": [[21.1, 74.0], [26.9, 82.8]],
+      "Maharashtra": [[15.6, 72.6], [22.0, 80.9]],
+      "Manipur": [[23.8, 93.0], [25.7, 94.8]],
+      "Meghalaya": [[25.0, 89.8], [26.1, 92.8]],
+      "Mizoram": [[21.9, 92.2], [24.5, 93.4]],
+      "Nagaland": [[25.2, 93.3], [27.0, 95.3]],
+      "Odisha": [[17.8, 81.4], [22.6, 87.5]],
+      "Punjab": [[29.5, 73.8], [32.5, 76.9]],
+      "Rajasthan": [[23.0, 69.5], [30.2, 78.3]],
+      "Sikkim": [[27.0, 88.0], [28.1, 88.9]],
+      "Tamil Nadu": [[8.0, 76.2], [13.6, 80.3]],
+      "Telangana": [[15.8, 77.2], [19.9, 81.8]],
+      "Tripura": [[22.9, 91.1], [24.5, 92.3]],
+      "Uttar Pradesh": [[23.8, 77.1], [30.4, 84.6]],
+      "Uttarakhand": [[28.7, 77.6], [31.5, 81.1]],
+      "West Bengal": [[21.5, 85.8], [27.2, 89.9]]
+    };
+
     let stateHighlightLayer = null;
 
-    document.getElementById("stateFilter").addEventListener("change", async (e) => {
+    document.getElementById("stateFilter").addEventListener("change", (e) => {
       const st = e.target.value;
       if (stateHighlightLayer) { map.removeLayer(stateHighlightLayer); stateHighlightLayer = null; }
       if (!st) { map.setView([20.5937, 78.9629], 5); return; }
-      try {
-        const r = await fetch(`${API}/api/location/search?q=${encodeURIComponent(st + ', India')}&limit=1`);
-        const d = await r.json();
-        if (d.results && d.results.length) {
-          const item = d.results[0];
-          if (item.bbox) map.fitBounds([[item.bbox.min_lat, item.bbox.min_lon],[item.bbox.max_lat, item.bbox.max_lon]], { padding:[20,20] });
-          else map.setView([item.lat, item.lon], 7);
-          
-          if (item.osm_type && item.osm_id) {
-            try {
-              const br = await fetch(`${API}/api/location/boundary?osm_type=${item.osm_type}&osm_id=${item.osm_id}&q=${encodeURIComponent(st)}`);
-              const bd = await br.json();
-              if (bd.geojson) {
-                stateHighlightLayer = L.geoJSON(bd.geojson, {
-                  style: { color: "#0284c7", fillColor: "#0284c7", fillOpacity: 0.12, weight: 2.5, dashArray: "4, 4" }
-                }).addTo(map);
-              }
-            } catch(err) {}
-          }
-          toast(`State highlighted: ${st}`, "ok");
-        }
-      } catch (err) {}
+      if (STATE_COORDS[st]) {
+        map.fitBounds(STATE_COORDS[st], { padding: [20, 20] });
+        toast(`State focused: ${st}`, "ok");
+      }
     });
 
     async function selectLocation(item) {
@@ -1035,10 +1078,69 @@
       document.getElementById("contourActions").style.display = "block";
       setReady(true);
       toast(`Uploaded: ${file.name}`, "ok");
+      loadAndRenderContourMap(file);
+    }
+
+    let contourPolylineLayer = null;
+
+    function renderContourPolylinesOnMap(geojson) {
+      if (contourPolylineLayer) {
+        map.removeLayer(contourPolylineLayer);
+        contourPolylineLayer = null;
+      }
+      if (!geojson || !geojson.features || !geojson.features.length) return;
+
+      contourPolylineLayer = L.geoJSON(geojson, {
+        style: function(feature) {
+          const elev = feature.properties?.elevation_m || 270;
+          const isMajor = elev % 5 === 0;
+          return {
+            color: isMajor ? "#d97706" : "#f59e0b",
+            weight: isMajor ? 2.5 : 1.5,
+            opacity: 0.85
+          };
+        },
+        onEachFeature: function(feature, layer) {
+          if (feature.properties && feature.properties.elevation_m != null) {
+            layer.bindTooltip(`Contour Elevation: ${feature.properties.elevation_m} m`, { sticky: true });
+          }
+        }
+      }).addTo(map);
+
+      const bounds = contourPolylineLayer.getBounds();
+      contourBounds = bounds;
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+
+    async function loadAndRenderContourMap(file) {
+      showLoader("Rendering Uploaded Contour Map…", "Extracting elevation polylines & zooming to bounds");
+      try {
+        const formData = new FormData();
+        formData.append("contour_map", file);
+
+        const rPoly = await fetch(`${API}/api/contour/extract-polylines`, {
+          method: "POST",
+          body: formData,
+        });
+        const dPoly = await rPoly.json();
+        if (rPoly.ok && dPoly.geojson) {
+          renderContourPolylinesOnMap(dPoly.geojson);
+        }
+
+        clearResultLayers();
+        setReady(true);
+        toast(`Contour map loaded! Choose K or draw a sub-area, then click Analyze.`, "ok");
+      } catch (e) {
+        toast(`Contour Error: ${e.message}`, "err");
+      } finally {
+        hideLoader();
+      }
     }
 
     document.getElementById("btnEntireContour").addEventListener("click", () => {
-      drawnItems.clearLayers(); currentPolygon = null; setReady(true); toast("Analyzing entire contour map", "ok");
+      drawnItems.clearLayers(); currentPolygon = null; setReady(true);
+      if (uploadedKmlFile) analyze();
+      else toast("Upload a contour file first", "err");
     });
     document.getElementById("btnSubContour").addEventListener("click", () => enableFreehandLasso());
 
@@ -1166,6 +1268,7 @@
     }
 
     function renderContourResults(d, rainfall) {
+      resultData = d;
       const summaryTable = d.summary_table || [];
       const sites = summaryTable.map((item, idx) => ({
         rank: item.rank,
@@ -1186,9 +1289,31 @@
         }
       }));
 
+      document.getElementById("noRes").style.display = "none";
+      document.getElementById("resBox").style.display = "flex";
+
       renderCandidateList(sites);
       selectCandidate(0, sites, rainfall);
       renderMapOverlays(sites, null);
+
+      if (sites.length > 0) {
+        const lats = sites.map(s => s.location.lat);
+        const lons = sites.map(s => s.location.lon);
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+        const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+        const padLat = Math.max(0.003, (maxLat - minLat) * 0.25);
+        const padLon = Math.max(0.003, (maxLon - minLon) * 0.25);
+
+        contourBounds = [[minLat - padLat, minLon - padLon], [maxLat + padLat, maxLon + padLon]];
+
+        // Highlight contour bounding zone on map
+        drawnItems.clearLayers();
+        const contourPoly = L.rectangle(contourBounds, {
+          color: "#d97706", fillColor: "#d97706", fillOpacity: 0.12, weight: 2, dashArray: "5, 5"
+        });
+        drawnItems.addLayer(contourPoly);
+        map.fitBounds(contourBounds, { padding: [30, 30] });
+      }
     }
 
     function renderCandidateList(sites) {
@@ -1344,11 +1469,17 @@
     document.querySelectorAll(".step-btn").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
     function showLoader(m, s) {
-      document.getElementById("ldrM").textContent = m;
-      document.getElementById("ldrS").textContent = s || "";
-      document.getElementById("loader").classList.add("on");
+      const lm = document.getElementById("ldrM");
+      const ls = document.getElementById("ldrS");
+      const ld = document.getElementById("loader");
+      if (lm) lm.textContent = m;
+      if (ls) ls.textContent = s || "";
+      if (ld) ld.classList.add("on");
     }
-    function hideLoader() { document.getElementById("loader").classList.remove("on"); }
+    function hideLoader() {
+      const ld = document.getElementById("loader");
+      if (ld) ld.classList.remove("on");
+    }
 
     function toast(msg, type="") {
       const el = document.getElementById("toast");

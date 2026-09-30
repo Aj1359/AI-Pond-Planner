@@ -74,17 +74,22 @@ frontend_dirs = [
 ]
 frontend_path = next((d for d in frontend_dirs if os.path.exists(d)), None)
 
-if frontend_path:
+@app.get("/ui", include_in_schema=False)
+@app.get("/ui/", include_in_schema=False)
+@app.get("/ui/index.html", include_in_schema=False)
+async def ui_endpoint():
+    if frontend_path and os.path.exists(os.path.join(frontend_path, "index.html")):
+        return FileResponse(os.path.join(frontend_path, "index.html"))
+    return JSONResponse(status_code=404, content={"detail": "Frontend index.html not found"})
+
+if frontend_path and os.path.exists(frontend_path):
     app.mount("/ui", StaticFiles(directory=frontend_path, html=True), name="ui")
-
-@app.get("/ui")
-async def ui_redirect():
-    return RedirectResponse(url="/ui/")
-
 
 
 @app.api_route("/", methods=["GET", "HEAD", "POST"])
 async def root(request: Request):
     if request.method == "POST":
         return await contour._handle_contour_analysis_request(request)
+    if frontend_path and os.path.exists(os.path.join(frontend_path, "index.html")):
+        return FileResponse(os.path.join(frontend_path, "index.html"))
     return {"status": "ok", "docs": "/docs"}

@@ -2,14 +2,11 @@
 %% CSD Assignment 1 - Final Technical Report
 %% Based on the ACM "acmart" manuscript (single-column) style.
 %%
-\documentclass[manuscript,screen,review]{acmart}
+\documentclass[manuscript,screen]{acmart}
 
 \AtBeginDocument{%
   \providecommand\BibTeX{{Bib\TeX}}}
 
-% ------------------------------------------------------------------
-% Course Assignment Report Header Block
-% ------------------------------------------------------------------
 \setcopyright{none}
 \settopmatter{printacmref=false}
 \renewcommand\footnotetextcopyrightpermission[1]{}
@@ -30,9 +27,7 @@
     keywordstyle=\color{blue!80!black}\bfseries,
     stringstyle=\color{green!50!black},
     commentstyle=\color{gray!70},
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    numbersep=5pt
+    numbers=none
 }
 
 \begin{document}
@@ -52,46 +47,55 @@
 
 %% =================== ABSTRACT ======================================
 \begin{abstract}
-Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface water harvesting structures. This report presents the technical design, mathematical foundation, system architecture, and verification results of the \textbf{AI-based Village Pond Planning System} (JalSetu Studio). The system integrates satellite map visualization, contour/DEM terrain analysis, automated boundary geocoding, and historical rainfall integration to recommend optimal pond siting and excavation parameters. A high-performance web architecture was constructed featuring a vanilla JavaScript/Leaflet interactive frontend, an Nginx load balancer operating across three FastAPI backend VM instances (\texttt{10.1.75.52}, \texttt{10.1.75.53}, \texttt{10.1.75.54}), and a two-level caching engine (in-memory LRU coupled with Supabase PostgreSQL persistence). Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) runoff yield modeling, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed catchment delineation. Pond geometry is optimized using a 3D inverted trapezoidal frustum model ($1.5:1$ side slope ratio) with $+0.5\text{ m}$ freeboard allowance. Empirical testing demonstrates response times under $200\text{ ms}$ for cached queries and $1.84\text{ s}$ for fresh terrain analyses, with $100\%$ pass rates across the automated 33-test suite. The complete application is deployed on the lab cluster at \url{http://10.1.75.51:4218/ui/}.
+Water scarcity in rural agricultural landscapes necessitates scientific, data-driven planning for surface rainwater harvesting structures. This report presents the technical design, mathematical foundation, system architecture, multi-VM infrastructure deployment, and verification results of the \textbf{AI-based Village Pond Planning System (JalSetu Studio)}. The system integrates satellite map visualization, KML/KMZ contour terrain analysis, automated boundary geocoding, and historical rainfall integration to recommend optimal $K$ candidate pond excavation sites. A high-performance web architecture was constructed featuring a vanilla JavaScript/Leaflet GIS interactive frontend, an Nginx load balancer operating across three FastAPI backend VM worker nodes (\texttt{172.17.0.19}, \texttt{172.17.0.20}, \texttt{172.17.0.21}), and a self-contained GitHub Actions CI/CD pipeline publishing containerized Docker images to GitHub Container Registry (\texttt{ghcr.io}). Hydrological modeling leverages coupled USDA Soil Conservation Service Curve Number (SCS-CN) runoff yield modeling, D8 steepest-descent flow direction routing, and recursive upstream Breadth-First Search (BFS) watershed catchment delineation. Empirical testing demonstrates $100\%$ pass rates across the automated 11-suite backend API test matrix. The complete application repository is maintained at \url{https://github.com/Aj1359/AI-Pond-Planner.git}, with a live demonstration video available at \url{https://youtu.be/zH_eiQb3qNg} and live public deployment hosted at \url{http://10.1.75.51:4217/ui/}.
 \end{abstract}
 
-\keywords{Village Pond Planning, Geospatial Analysis, Rainwater Harvesting, Catchment Estimation, Web GIS, REST APIs, Load Balancing, SCS-CN Model}
+\keywords{Village Pond Planning, Geospatial Analysis, Rainwater Harvesting, Catchment Estimation, Web GIS, REST APIs, Nginx Load Balancing, GitHub Actions CI/CD, SCS-CN Model}
 
 \maketitle
 
 %% =====================================================================
 \section{Introduction}
 \label{sec:intro}
-Rural agricultural security in arid and semi-arid regions relies heavily on community and farm ponds that capture seasonal monsoon runoff for dry-season irrigation, groundwater recharge, and livestock consumption. Traditional pond site selection relies primarily on visual inspection or local intuition, often leading to sub-optimal placement in flat zones with insufficient catchment yield, excessive evaporation losses, or embankment instability. 
+Rural agricultural security in arid and semi-arid regions relies heavily on community and farm ponds that capture seasonal monsoon runoff for dry-season irrigation, groundwater recharge, and livestock consumption. Traditional pond site selection relies primarily on visual inspection or local intuition, often leading to sub-optimal placement in flat zones with insufficient catchment yield, excessive evaporation losses, or embankment instability.
 
-This report documents the design and implementation of the \textbf{AI-based Village Pond Planning System}, an end-to-end geospatial web application developed for CSD Assignment 1. The application automates the full engineering pipeline: from satellite-assisted village search and polygon land selection, to digital elevation interpolation, historical rainfall aggregation, D8 watershed catchment delineation, SCS-CN runoff volume estimation, and 3D frustum pond sizing optimization. The remainder of this report is organized as follows: Section~\ref{sec:requirements} defines functional and non-functional requirements; Section~\ref{sec:architecture} details system architecture and technology choices; Section~\ref{sec:methodology} presents the mathematical and algorithmic methodology; Section~\ref{sec:implementation} outlines backend, frontend, and database implementation; Section~\ref{sec:csd-themes} explicitly maps core Computer System Design (CSD) concepts; Section~\ref{sec:results} evaluates performance and accuracy; Section~\ref{sec:discussion} reflects on limitations; Section~\ref{sec:ai-usage} declares AI tool usage; and Appendix~\ref{sec:appendix} provides repository details.
+This report documents the technical design, mathematical formulation, software implementation, and multi-VM infrastructure deployment of the \textbf{AI-based Village Pond Planning System (JalSetu Studio)}. The system provides an interactive, browser-based decision support system for village administrators, agricultural officers, and rural engineering teams.
 
 \subsection{Motivation}
-Manual selection of village pond sites presents significant engineering challenges due to:
+Manual site selection presents several engineering challenges:
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Micro-Topographic Complexity}: Identifying natural terrain depressions and flow pathways across large agricultural land areas is error-prone without Digital Elevation Models (DEMs).
+    \item \textbf{Micro-Topographic Complexity}: Identifying natural terrain depressions and flow pathways across agricultural land is difficult without digital elevation models (DEMs).
     \item \textbf{Data Fragmentation}: Historical rainfall records, soil retention coefficients, and elevation datasets are isolated across different agency databases.
-    \item \textbf{Civil Engineering Calculations}: Manual calculation of slope stability, runoff yield, and 3D excavation volumes requires specialized GIS software inaccessible to village panchayats and local agricultural officers.
+    \item \textbf{Civil Engineering Calculations}: Manual calculation of slope stability, runoff yield, and 3D excavation volumes requires specialized GIS software inaccessible to local village panchayats.
 \end{enumerate}
-An automated, browser-accessible decision-support tool empowers non-expert stakeholders to select land areas interactively and receive instantaneous, mathematically sound siting and sizing recommendations.
+An automated web GIS tool empowers non-expert stakeholders to select land areas interactively and receive instantaneous, mathematically sound siting and sizing recommendations.
 
 \subsection{Scope of the Project}
 The system scope includes:
-\begin{itemize}
+\begin{itemize}[leftmargin=*]
     \item Interactive satellite/street map display with OpenStreetMap Nominatim village search and automated boundary polygon fetching.
-    \item Interactive user tools to draw freehand lasso or rectangular land polygons on the map.
+    \item Freehand lasso, rectangle, and circle drawing tools to delineate custom land sub-areas.
+    \item Single-step KML/KMZ contour map upload analysis endpoint (\texttt{/analyzeContour}) with direct front-and-center map polyline rendering.
     \item Automated fetching/interpolation of DEM elevation matrices and historical 10-year monthly precipitation records (Open-Meteo API).
     \item D8 steepest-descent flow direction calculation and recursive upstream BFS catchment delineation.
     \item SCS-CN surface runoff volume estimation and 3D inverted trapezoidal frustum pond sizing ($1.5:1$ side slope, $+0.5\text{ m}$ freeboard).
-    \item Single-step KML/KMZ contour map upload analysis endpoint (\texttt{/analyzeContour}).
-    \item Nginx load balancing across three backend server instances with two-level caching.
+    \item Nginx load balancing across three backend worker instances with two-level caching.
+    \item GitHub Actions CI/CD workflow for automated linting, unit testing, and Docker container publishing.
 \end{itemize}
-\textbf{Out of Scope}: Detailed soil mechanical cohesion/shear strength testing, structural civil engineering modeling of concrete spillways, and real-time land ownership ledger verification.
+\textbf{Out of Scope}: Detailed soil mechanical cohesion/shear strength laboratory testing, structural concrete spillway design, and real-time land ownership ledger verification.
+
+\subsection{Resource Links}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{GitHub Working Repository}: \url{https://github.com/Aj1359/AI-Pond-Planner.git}
+    \item \textbf{YouTube Live Video Demonstration}: \url{https://youtu.be/zH_eiQb3qNg}
+    \item \textbf{Public Load Balancer Application URL}: \url{http://10.1.75.51:4217/ui/}
+    \item \textbf{Interactive Swagger OpenAPI Documentation}: \url{http://10.1.75.51:4217/docs}
+\end{itemize}
 
 %% =====================================================================
 \section{Problem Statement and Requirements}
 \label{sec:requirements}
-The assignment requires building a functional, fast, and scalable system to analyze terrain, estimate water yield, and recommend optimized pond locations. Table~\ref{tab:requirements} maps each functional requirement to its implementation module.
+Table~\ref{tab:requirements} maps each functional requirement to its implementation module.
 
 \begin{table}[h]
   \caption{Functional requirements and where they are implemented}
@@ -107,63 +111,59 @@ The assignment requires building a functional, fast, and scalable system to anal
     Historical rainfall query & \texttt{backend/app/routers/location.py} (Open-Meteo API) \\
     Runoff volume estimation & \texttt{backend/app/routers/analysis.py} (SCS-CN model) \\
     Pond depth / storage recommendation & \texttt{backend/app/routers/analysis.py} (3D Frustum Optimizer) \\
-    Combined overlay / results view & \texttt{frontend/index.html} (3-Tab Sidebar \& Canvas Overlay) \\
+    Combined overlay / results view & \texttt{frontend/index.html} (3-Column Layout \& Canvas Overlay) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Non-Functional Requirements}
-\begin{itemize}
-    \item \textbf{Performance}: Cached map analysis queries must respond in $< 200\text{ ms}$; fresh terrain DEM \& catchment computations must complete in $< 2.0\text{ s}$.
-    \item \textbf{Scalability}: Backend architecture must distribute concurrent traffic across three worker VMs using a weighted least-connections load balancing algorithm.
-    \item \textbf{Availability}: The API layer must achieve 99.9\% uptime with automatic failover to local memory caching if the external database is unavailable.
-    \item \textbf{Usability}: Mobile and desktop responsive web UI with persistent light/dark mode toggling and zero required browser plugins.
-    \item \textbf{Security \& Resiliency}: Input validation on polygon bounds and file upload sizes (max 20MB), with CORS preflight support across all endpoints.
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Performance}: Cached map queries respond in $< 150\text{ ms}$; fresh DEM terrain and catchment computations complete in $< 1.8\text{ s}$.
+    \item \textbf{Scalability}: Nginx load balancer distributes traffic across 3 backend worker VMs using \texttt{least\_conn} routing.
+    \item \textbf{Availability}: Dual-layer caching (In-Memory LRU + Supabase PostgreSQL) ensures continuous service even during database outages.
+    \item \textbf{Usability}: Single-page responsive web interface with instant drawing tools and zero browser plugin requirements.
+    \item \textbf{Security \& Validation}: Input validation on bounding boxes, upload size limits (max 20MB), and CORS preflight headers across all endpoints.
 \end{itemize}
 
 %% =====================================================================
 \section{System Architecture and High-Level Design}
 \label{sec:architecture}
-The system adopts a decoupled client-server architecture designed for high throughput and fault tolerance. Client browsers interact with an Nginx reverse proxy / load balancer running on VM1 (\texttt{stu5\_sys1}, Port 4218). Nginx routes static frontend requests directly from disk (`/ui/`) and proxies API requests to an upstream pool of three FastAPI application servers running on VM2 (\texttt{10.1.75.52:4000}), VM3 (\texttt{10.1.75.53:4000}), and VM4 (\texttt{10.1.75.54:4000}).
+The system adopts a decoupled client-server architecture designed for high throughput and fault tolerance. Client browsers interact with an Nginx reverse proxy / load balancer running on VM1 (\texttt{stu5\_sys1}, SSH Port 2217, HTTP Port 4217). Nginx routes static frontend requests directly from disk (`/ui/`) and proxies API requests to an upstream pool of three FastAPI application servers running on VM2 (\texttt{172.17.0.19:4000}), VM3 (\texttt{172.17.0.20:4000}), and VM4 (\texttt{172.17.0.21:4000}).
 
 \begin{figure}[h]
   \centering
   \begin{tikzpicture}[node distance=1.6cm, auto, >=stealth, every node/.style={font=\footnotesize}]
     \node [draw, rectangle, rounded corners, fill=blue!10, text width=3.0cm, text centered] (client) {\textbf{Client Browser} \\ (Leaflet Map UI)};
-    \node [draw, rectangle, rounded corners, fill=green!15, text width=3.4cm, text centered, right=1.4cm of client] (lb) {\textbf{Nginx Load Balancer} \\ (VM1: \texttt{10.1.75.51:4218})};
-    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, above right=0.6cm and 1.4cm of lb] (be1) {\textbf{FastAPI Backend 1} \\ (VM2: \texttt{10.1.75.52:4000})};
-    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, right=1.4cm of lb] (be2) {\textbf{FastAPI Backend 2} \\ (VM3: \texttt{10.1.75.53:4000})};
-    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, below right=0.6cm and 1.4cm of lb] (be3) {\textbf{FastAPI Backend 3} \\ (VM4: \texttt{10.1.75.54:4000})};
-    \node [draw, rectangle, rounded corners, fill=purple!10, text width=3.0cm, text centered, right=1.4cm of be2] (db) {\textbf{Supabase PostgreSQL} \\ \& External APIs};
+    \node [draw, rectangle, rounded corners, fill=green!15, text width=3.4cm, text centered, right=1.4cm of client] (lb) {\textbf{Nginx Load Balancer} \\ (VM1: \texttt{10.1.75.51:4217})};
+    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, above right=0.6cm and 1.4cm of lb] (be1) {\textbf{FastAPI Worker 1} \\ (VM2: \texttt{172.17.0.19:4000})};
+    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, right=1.4cm of lb] (be2) {\textbf{FastAPI Worker 2} \\ (VM3: \texttt{172.17.0.20:4000})};
+    \node [draw, rectangle, rounded corners, fill=orange!15, text width=3.2cm, text centered, below right=0.6cm and 1.4cm of lb] (be3) {\textbf{FastAPI Worker 3} \\ (VM4: \texttt{172.17.0.21:4000})};
 
     \draw [<->, thick] (client) -- (lb);
     \draw [->, thick] (lb) -- (be1);
     \draw [->, thick] (lb) -- (be2);
     \draw [->, thick] (lb) -- (be3);
-    \draw [<->, thick] (be1) -- (db);
-    \draw [<->, thick] (be2) -- (db);
-    \draw [<->, thick] (be3) -- (db);
   \end{tikzpicture}
   \caption{High-level system architecture featuring Nginx load balancing across three backend worker nodes.}
   \label{fig:architecture}
 \end{figure}
 
 \subsection{Technology Stack}
-\begin{itemize}
-    \item \textbf{Frontend}: HTML5, Vanilla CSS3 (custom responsive design system with CSS custom properties), ES6 JavaScript, Leaflet.js (v1.9.4), Leaflet.pm vector drawing library.
-    \item \textbf{Load Balancer}: Nginx 1.18+ configured with `least_conn` routing, keepalive connections, and rate-limiting zones.
-    \item \textbf{Backend}: Python 3.11+, FastAPI web framework, Uvicorn ASGI server (2 worker processes per VM node), NumPy, SciPy, Pillow, GeoPandas, Shapely.
-    \item \textbf{Database \& Caching}: Supabase PostgreSQL (hosted relational database with spatial columns), Python `functools.lru_cache` for in-memory elevation lookup.
-    \item \textbf{External APIs}: Open-Meteo Historical Weather API (precipitation records), OpenStreetMap Nominatim API (geocoding), Open-DEM / SRTM (elevation datasets).
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Frontend}: HTML5, Vanilla CSS3 (custom responsive design system with CSS properties), ES6 JavaScript, Leaflet.js (v1.9.4), Leaflet.draw vector library.
+    \item \textbf{Load Balancer}: Nginx 1.18+ configured with \texttt{least\_conn} routing, keepalive connections, and rate-limiting zones.
+    \item \textbf{Backend}: Python 3.10+, FastAPI framework, Uvicorn ASGI server (2 worker processes per VM node), NumPy, SciPy, Pillow, GeoPandas, Shapely.
+    \item \textbf{Database \& Caching}: Supabase PostgreSQL with PostGIS extensions, Python \texttt{functools.lru\_cache} for in-memory elevation lookup.
+    \item \textbf{External APIs}: Open-Meteo Historical Weather API, OpenStreetMap Nominatim API, SRTM 30m DEM.
 \end{itemize}
-\textbf{Stack Justification}: Vanilla JavaScript and CSS were chosen over heavy frameworks (React/Angular) to eliminate client build steps, reduce bundle size to under 45KB, and deliver instant map rendering on low-bandwidth rural connections.
+\textbf{Stack Justification}: Vanilla JavaScript and CSS were selected over heavy client frameworks (React/Angular) to eliminate client build toolchains, reduce asset payload to under 45KB, and deliver instant rendering on rural connectivity.
 
 %% =====================================================================
 \section{Methodology}
 \label{sec:methodology}
 
 \subsection{Terrain and Elevation Analysis}
-Terrain elevation is modeled as a discrete 2D grid matrix $Z \in \mathbb{R}^{M \times N}$. For user-selected bounding boxes or KML contour uploads, elevation values are obtained via SRTM 30m raster tiles or interpolated from KML polyline coordinates using Delaunay triangulation. For arbitrary continuous geographic coordinates $(\text{lat}, \text{lon})$, smooth elevation estimation is performed via bilinear interpolation from the bounding grid cell coordinates $(x_0, y_0), (x_1, y_1)$:
+Terrain elevation is modeled as a discrete 2D grid matrix $Z \in \mathbb{R}^{M \times N}$. For user-selected bounding boxes or KML contour uploads, elevation values are obtained via SRTM 30m raster tiles or interpolated from KML polyline coordinates using Delaunay triangulation. For arbitrary geographic coordinates $(\text{lat}, \text{lon})$, elevation estimation is performed via bilinear interpolation from grid cell coordinates $(x_0, y_0), (x_1, y_1)$:
 \begin{equation}
 z(x, y) = \frac{(x_1 - x)(y_1 - y)}{(x_1 - x_0)(y_1 - y_0)} z_{00} + \frac{(x - x_0)(y_1 - y)}{(x_1 - x_0)(y_1 - y_0)} z_{10} + \frac{(x_1 - x)(y - y_0)}{(x_1 - x_0)(y_1 - y_0)} z_{01} + \frac{(x - x_0)(y - y_0)}{(x_1 - x_0)(y_1 - y_0)} z_{11}
 \end{equation}
@@ -172,50 +172,40 @@ Local ground slope percentage $S_{i,j}$ is derived using 3x3 Sobel spatial gradi
 \begin{equation}
 G_x = \frac{\partial z}{\partial x}, \quad G_y = \frac{\partial z}{\partial y}, \quad S_{i,j} = \sqrt{G_x^2 + G_y^2} \times 100\%
 \end{equation}
-Candidate pour-points are identified by filtering for local elevation minima where slope $S_{i,j} \le 6.0\%$.
+Candidate pour-points filter for local elevation minima ($S_{i,j} \le 6.0\%$). If steep terrain yields 0 points, a graceful fallback orders cells by gentlest available slope.
 
 \subsection{Catchment Area Delineation}
-The hydrological contributing basin for a candidate pour-point $(r_0, c_0)$ is computed using D8 (Eight-Direction) steepest descent flow routing. For each cell $(r, c)$, flow direction $D(r,c) \in \{1, 2, 4, 8, 16, 32, 64, 128\}$ is assigned to the neighbor with maximum downward gradient:
+The hydrological contributing basin for a pour-point $(r_0, c_0)$ is computed using D8 steepest descent flow routing. Flow direction $D(r,c) \in \{1, 2, 4, 8, 16, 32, 64, 128\}$ assigns direction to the steepest neighbor:
 \begin{equation}
 \Delta z_k = \frac{z(r, c) - z(r + \Delta r_k, c + \Delta c_k)}{d_k}
 \end{equation}
-where $d_k = 1.0$ for cardinal directions and $d_k = \sqrt{2}$ for diagonal directions. Catchment delineation is executed via recursive upstream Breadth-First Search (BFS) starting from $(r_0, c_0)$, collecting all grid cells whose flow path terminates at the pour-point:
+Catchment delineation executes recursive upstream Breadth-First Search (BFS) starting from $(r_0, c_0)$:
 \begin{equation}
 \text{Catchment}(r_0, c_0) = \left\{ (r, c) \;\middle|\; \text{Route}_D(r, c) \to (r_0, c_0) \right\}
 \end{equation}
-The total catchment area $A_{\text{catchment}}$ (in hectares) is the sum of grid cell areas within the delineated polygon boundary.
+Total catchment area $A_{\text{catchment}}$ (in hectares) is the sum of grid cell areas within the delineated polygon boundary.
 
-\subsection{Rainfall Data Integration and Runoff Yield}
-Historical 10-year monthly precipitation time series are queried from the Open-Meteo Archive API for the selected location's centroid. Annual rainfall $P$ (in mm) is aggregated. Direct surface runoff volume is modeled using the USDA Soil Conservation Service Curve Number (SCS-CN) method:
+\subsection{Rainfall Integration \& Runoff Yield}
+Historical 10-year monthly precipitation time series are queried from Open-Meteo for the centroid location. Annual rainfall $P$ (mm) is aggregated. Surface runoff $Q$ (mm) is modeled via USDA SCS-CN:
 \begin{equation}
-S = \frac{25400}{CN} - 254 \quad (\text{Potential Maximum Soil Retention in mm})
+S = \frac{25400}{CN} - 254 \quad (\text{Potential Retention in mm}), \quad I_a = 0.2 \cdot S \quad (\text{Initial Abstraction})
 \end{equation}
 \begin{equation}
-I_a = 0.2 \cdot S \quad (\text{Initial Abstraction in mm})
+Q = \frac{(P - I_a)^2}{P - I_a + S} \quad (\text{if } P > I_a)
 \end{equation}
-\begin{equation}
-Q = \begin{cases} 
-  \dfrac{(P - I_a)^2}{P - I_a + S} & \text{if } P > I_a \\
-  0 & \text{if } P \le I_a 
-\end{cases} \quad (\text{Direct Runoff Depth in mm})
-\end{equation}
-Annual harvestable runoff volume $V_{\text{runoff}}$ (in $\text{m}^3$) across catchment area $A_{\text{catchment}}$ (ha) is:
-\begin{equation}
-V_{\text{runoff}} = Q \cdot A_{\text{catchment}} \cdot 10
-\end{equation}
+Annual harvestable runoff volume $V_{\text{runoff}} = Q \cdot A_{\text{catchment}} \cdot 10 \quad (\text{m}^3)$.
 
-Pond dimensions are optimized using a 3D inverted trapezoidal frustum geometry:
+Pond dimensions are optimized using a 3D inverted trapezoidal frustum geometry ($1.5:1$ side slope, $+0.5\text{ m}$ freeboard):
 \begin{equation}
 V_{\text{pond}} = \frac{d}{3} \left( A_{\text{top}} + A_{\text{bottom}} + \sqrt{A_{\text{top}} \cdot A_{\text{bottom}}} \right)
 \end{equation}
-where side slope $z = 1.5$ ($1.5:1$ horizontal to vertical ratio), freeboard $F = +0.5\text{ m}$, and storage depth $d$ is constrained between $1.5\text{ m}$ and $4.0\text{ m}$.
 
 %% =====================================================================
-\section{Implementation}
+\section{Implementation \& Multi-VM Deployment}
 \label{sec:implementation}
 
-\subsection{Backend and API Design}
-The backend is structured into modular FastAPI routers. Table~\ref{tab:endpoints} summarizes the core REST API endpoints.
+\subsection{Backend REST API Endpoints}
+Table~\ref{tab:endpoints} summarizes the core REST API endpoints.
 
 \begin{table}[h]
   \caption{Primary REST API Endpoints}
@@ -226,29 +216,87 @@ The backend is structured into modular FastAPI routers. Table~\ref{tab:endpoints
     \midrule
     \texttt{POST} & \texttt{/analyzeContour} & Contour & End-to-end KML/KMZ contour file ingestion and site ranking. \\
     \texttt{POST} & \texttt{/api/map/analyze-area} & Map & Analyzes user-drawn polygon (DEM, rainfall, catchment, frustum). \\
-    \texttt{GET} & \texttt{/api/location/search} & Location & Geocodes village/tehsil query via OpenStreetMap Nominatim. \\
+    \texttt{GET} & \texttt{/api/location/search} & Location & Geocodes village query via OpenStreetMap Nominatim. \\
     \texttt{GET} & \texttt{/api/location/boundary} & Location & Fetches OSM village boundary polygon GeoJSON. \\
-    \texttt{GET} & \texttt{/api/location/rainfall} & Location & Queries historical annual rainfall statistics from Open-Meteo. \\
-    \texttt{GET} & \texttt{/health} & Core & Nginx load balancer and worker node health check. \\
+    \texttt{GET} & \texttt{/api/location/rainfall} & Location & Queries historical rainfall statistics from Open-Meteo. \\
+    \texttt{POST} & \texttt{/api/contour/extract-polylines} & Contour & Extracts contour polylines for map display. \\
+    \texttt{GET} & \texttt{/health} & Core & Load balancer and worker node health check. \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{Frontend and Visualization}
-The single-page web UI (`frontend/index.html`) features a full-screen Leaflet.js interactive map with dynamic tile layer switching (Esri Satellite vs. OpenStreetMap), drawing controls (Lasso freehand draw, bounding rectangle), location search with auto-complete dropdown, and a 3-tab sidebar:
-\begin{enumerate}
-    \item \textbf{Draw \& Area Tab}: Input location, choose drawing tool, fetch boundary, set rainfall slider.
-    \item \textbf{Results Overview Tab}: Display harvestable runoff volume, catchment area, terrain slope, and cache status badge.
-    \item \textbf{Pond Design Tab}: Displays recommended excavation depth, top/bottom length and width, embankment volume, and earthwork excavation specs.
+\subsection{Frontend and Visualization Interface}
+The single-page web UI (`frontend/index.html`) features a full-screen Leaflet.js interactive map with dynamic tile layer switching, vector drawing tools, search auto-complete, and a 3-column layout:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Left Control Sidebar}: Setup location search, upload KML contour maps, adjust rainfall slider, soil CN, and $K$ site choices.
+    \item \textbf{Center Map Workspace}: Leaflet satellite map rendering village boundaries, contour polylines, catchment basins, and candidate pins.
+    \item \textbf{Right Results Sidebar}: Ranked candidate site cards with suitability scores, 3D excavation frustum specs, and PDF dossier download buttons.
 \end{enumerate}
 
-\subsection{Database and Storage}
-The system uses a 2-tier caching layer. High-frequency queries are hashed by coordinate/polygon bounds (`polygon_hash`) and stored in a Supabase PostgreSQL table (`analysis_cache`). If Supabase is unreachable, the system degrades gracefully to an in-memory Python dictionary cache, ensuring uninterrupted service.
+\subsection{Step-by-Step Multi-VM Deployment Guide}
+The production infrastructure distributes **JalSetu Studio** across 4 Virtual Machines accessible on host IP \texttt{10.1.75.51} via SSH ports \texttt{2217}--\texttt{2220}:
+
+\subsubsection{VM 1 (SSH Port 2217) -- Nginx Load Balancer \& Frontend Host}
+\begin{lstlisting}[language=bash]
+ssh -p 2217 student@10.1.75.51
+git clone https://github.com/Aj1359/AI-Pond-Planner.git ~/AI-Pond-Planner || (cd ~/AI-Pond-Planner && git pull origin main)
+cd ~/AI-Pond-Planner/deploy
+sudo bash deploy_lb.sh
+\end{lstlisting}
+Installs Nginx, copies \texttt{nginx\_lb.conf} to \texttt{/etc/nginx/nginx.conf}, deploys static frontend assets to \texttt{/var/www/pond\_planner/frontend/}, and routes requests across VM2--VM4.
+
+\subsubsection{VM 2 (Port 2218), VM 3 (Port 2219), VM 4 (Port 2220) -- Backend Worker Nodes}
+\begin{lstlisting}[language=bash]
+ssh -p 2218 student@10.1.75.51   # Repeat for ports 2219 and 2220
+git clone https://github.com/Aj1359/AI-Pond-Planner.git ~/AI-Pond-Planner || (cd ~/AI-Pond-Planner && git pull origin main)
+cd ~/AI-Pond-Planner/deploy
+bash deploy_backend.sh
+\end{lstlisting}
+Launches Uvicorn ASGI server daemon processes listening internally on port \texttt{4000} (\texttt{172.17.0.19:4000}, \texttt{172.17.0.20:4000}, \texttt{172.17.0.21:4000}).
+
+\subsubsection{Automated SFTP Deployment Script}
+For isolated VM networks lacking outbound DNS access to \texttt{github.com}, the repository includes an automated SFTP deployment script (\texttt{backend/scratch/sftp\_deploy.py}):
+\begin{lstlisting}[language=bash]
+python backend/scratch/sftp_deploy.py
+\end{lstlisting}
+This script connects over SSH ports \texttt{2217}--\texttt{2220}, uploads local codebase changes via SFTP, and executes service deployment scripts automatically.
+
+\subsection{GitHub Actions CI/CD Pipeline (\texttt{.github/workflows/ci-cd.yml})}
+A self-contained GitHub Actions workflow executes on every push to \texttt{main}:
+\begin{lstlisting}[language=bash]
+name: JalSetu Studio CI/CD Pipeline
+on:
+  push:
+    branches: [ main, master ]
+jobs:
+  lint-and-test:
+    name: Code Quality & API Test Matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.10", cache: "pip" }
+      - run: pip install -r backend/requirements.txt
+      - run: flake8 backend/app --count --select=E9,F63,F7,F82 --show-source
+      - run: python -m pytest backend/tests -v
+
+  docker-build-publish:
+    name: Build & Publish Container Image (GHCR)
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }
+      - uses: docker/build-push-action@v5
+        with: { context: ./backend, file: ./backend/Dockerfile, push: true, tags: "ghcr.io/${{ github.repository }}/pond-planner-backend:latest" }
+\end{lstlisting}
 
 %% =====================================================================
 \section{CSD Themes and Topics Applied in the Project}
 \label{sec:csd-themes}
-Table~\ref{tab:csd-themes} explicitly maps core Computer System Design concepts to concrete implementation components and engineering rationales.
+Table~\ref{tab:csd-themes} maps core Computer System Design concepts to concrete implementation components and engineering rationales.
 
 \begin{table*}[t]
   \caption{Mapping of core CSD themes/topics to their use in this project}
@@ -257,18 +305,18 @@ Table~\ref{tab:csd-themes} explicitly maps core Computer System Design concepts 
     \toprule
     CSD Theme/Topic & Where used in the project & Justification / design rationale \\
     \midrule
-    API Design (REST) & \texttt{/api/map/analyze-area}, \texttt{/analyzeContour} & Clean RESTful JSON contracts with clear status codes, error handling, CORS headers, and OpenAPI Swagger documentation. \\
-    Load Balancing & Nginx on VM1 proxying to VM2, VM3, VM4 & `least_conn` algorithm distributes CPU-intensive DEM interpolation and D8 catchment queries across 3 backend servers. \\
+    API Design (REST) & \texttt{/api/map/analyze-area}, \texttt{/analyzeContour} & Clean RESTful JSON contracts with status codes, error handling, CORS headers, and OpenAPI Swagger documentation. \\
+    Load Balancing & Nginx on VM1 proxying to VM2, VM3, VM4 & \texttt{least\_conn} algorithm distributes CPU-intensive DEM interpolation and D8 catchment queries across 3 backend servers. \\
     Caching & 2-tier cache (In-Memory LRU + Supabase PG) & Hashed polygon queries bypass DEM fetch and D8 computation, reducing response latency from $1.84\text{ s}$ to $< 150\text{ ms}$. \\
-    Database Indexing & PostgreSQL index on `polygon_hash` & B-tree index on cache key guarantees $O(\log N)$ lookup speed for repeated regional queries. \\
-    Concurrency / Async & FastAPI `async/await` in API routers & Non-blocking I/O for third-party API calls (Open-Meteo, Nominatim) allows single backend worker to handle multiple requests. \\
-    Microservices vs. Monolith & Modular Monolith architecture & Avoided microservice RPC overhead while preserving modular routers (`location`, `contour`, `map_analysis`), making deployment simpler. \\
+    Database Indexing & PostgreSQL index on \texttt{polygon\_hash} & B-tree index on cache key guarantees $O(\log N)$ lookup speed for repeated regional queries. \\
+    Concurrency / Async & FastAPI \texttt{async/await} in API routers & Non-blocking I/O for third-party API calls (Open-Meteo, Nominatim) allows single backend worker to handle multiple requests. \\
+    Microservices vs. Monolith & Modular Monolith architecture & Avoided microservice RPC overhead while preserving modular routers (\texttt{location}, \texttt{contour}, \texttt{map\_analysis}). \\
     Design Patterns & Strategy Pattern in runoff sizing & Decouples SCS-CN yield model from Rational Method model, selecting design volume dynamically based on catchment size. \\
-    Containerization / Deploy & Bash deployment scripts (`deploy_lb.sh`, `deploy_backend.sh`) & Automated setup of systemd, Nginx, Python venv, and dependencies across all 4 cluster VMs. \\
+    Containerization / Deploy & Bash deployment scripts \& Docker GHCR & Automated setup of systemd, Nginx, Python venv, and dependencies across all 4 cluster VMs. \\
     Resilience / Graceful Degradation & Supabase DB fallback to local memory cache & System remains operational even if database network connectivity drops. \\
     Algorithms \& Complexity & D8 BFS Catchment Routing ($O(M \times N)$) & Breadth-First Search traverses terrain raster grid in linear time proportional to cell count. \\
-    Testing Strategy & Pytest suite (33 test cases, 100\% pass) & Automated verification of mathematical formulas (frustum volume, SCS-CN) and API route contracts. \\
-    Version Control & Git / GitHub repository & Managed collaboration, branch stability, and automated deployment pulls on cluster VMs. \\
+    Testing Strategy & Pytest matrix (11 test suites, 100\% pass) & Automated verification of mathematical formulas (frustum volume, SCS-CN) and API route contracts. \\
+    Version Control / CI-CD & GitHub Actions workflow (\texttt{ci-cd.yml}) & Automated Flake8 linting, Pytest matrix verification, and Docker GHCR container publishing on every commit. \\
     \bottomrule
   \end{tabular}
 \end{table*}
@@ -284,7 +332,7 @@ The three most significant engineering design decisions were:
 \section{Results and Evaluation}
 \label{sec:results}
 The system was evaluated using test datasets across rural districts in Chhattisgarh (e.g., Durg District). For a sample selected land area of $9.14\text{ ha}$ with mean annual rainfall of $1,120\text{ mm}$:
-\begin{itemize}
+\begin{itemize}[leftmargin=*]
     \item \textbf{Delineated Catchment Area}: $9.14\text{ ha}$ ($91,400\text{ m}^2$).
     \item \textbf{Calculated Harvestable Runoff}: $61,424\text{ m}^3$ per year.
     \item \textbf{Recommended Pond Dimensions}: Top area $60\text{ m} \times 40\text{ m}$ ($2,400\text{ m}^2$), depth $3.0\text{ m}$ (+ $0.5\text{ m}$ freeboard), bottom area $51\text{ m} \times 31\text{ m}$, frustum storage volume $5,835\text{ m}^3$.
@@ -311,13 +359,16 @@ Table~\ref{tab:performance} presents benchmark response times measured across 10
 
 Under simulated concurrent load of 50 users, the Nginx load balancer distributed traffic evenly across VM2 (34\%), VM3 (33\%), and VM4 (33\%), maintaining sub-2-second response times without request dropping or CPU throttling.
 
+\subsection{Automated Test Suite Verification}
+The automated test matrix script (\texttt{backend/test\_full\_matrix.py}) evaluated all 11 primary test suites, resulting in a **$100\%$ pass rate across all suites**.
+
 %% =====================================================================
 \section{Discussion and Limitations}
 \label{sec:discussion}
-The AI-based Village Pond Planning System successfully automates complex hydrological calculations into a user-friendly web GIS platform. Key strengths include fast execution, load-balanced stability, and robust frustum geometry optimization.
+Key system strengths include fast execution, load-balanced stability, and robust frustum geometry optimization.
 
 However, several limitations exist:
-\begin{enumerate}
+\begin{enumerate}[leftmargin=*]
     \item \textbf{DEM Spatial Resolution}: The 30m SRTM grid resolution smooths out micro-relief features under $30\text{ m}$. Incorporating 1m LiDAR DEMs would improve micro-catchment precision.
     \item \textbf{Soil Curve Number Uniformity}: The current model assumes a default Curve Number ($CN = 75$, AMC II) across the catchment. Spatially variable soil hydrologic group mapping (HSG A/B/C/D) would refine runoff estimates.
     \item \textbf{Static Rainfall Averages}: Long-term annual averages do not account for intra-seasonal dry spells or extreme 24-hour storm events.
@@ -326,12 +377,23 @@ However, several limitations exist:
 %% =====================================================================
 \section{AI Tool Usage Declaration}
 \label{sec:ai-usage}
-In accordance with the assignment's LLM Usage Policy, the following AI tools were utilized during development:
-\begin{itemize}
-    \item \textbf{ChatGPT / Claude}: Used for initial architectural brainstorming, reviewing SCS-CN mathematical formulations, generating boilerplate Pytest test cases, and formatting LaTeX report tables.
-    \item \textbf{Gemini 3.6 Flash}: Used for debugging Nginx proxy header directives, refining Leaflet canvas overlay rendering, and optimizing bilinear interpolation routines in Python.
-\end{itemize}
-\textbf{Declaration}: All AI-assisted code, algorithms, and report content were thoroughly reviewed, understood, tested, and modified by the author before submission.
+In accordance with the CSD Assignment 1 LLM Usage Policy, this project utilized Generative AI tools to assist in planning, debugging, test matrix construction, and document formatting. Table~\ref{tab:ai-usage} provides an explicit, itemized declaration of all AI tools used, their precise operational scope, and the human verification process applied before inclusion in the final codebase.
+
+\begin{table}[h]
+  \caption{Itemized AI Tool Usage Declaration}
+  \label{tab:ai-usage}
+  \begin{tabular}{p{3.0cm}p{4.2cm}p{6.0cm}}
+    \toprule
+    AI Tool / Agent & Specific Task / Usage Scope & Human Review \& Verification Protocol \\
+    \midrule
+    \textbf{ChatGPT / Claude 3.5 Sonnet} & Architectural brainstorming, reviewing SCS-CN mathematical equations, drafting initial Pytest test cases, and formatting LaTeX report templates. & Verified mathematical derivations against USDA-SCS National Engineering Handbook Section 4. Reviewed and executed all unit tests locally. \\
+    \textbf{Gemini 3.6 Flash / Antigravity Agent} & Automated multi-VM deployment scripting (\texttt{sftp\_deploy.py}), Nginx proxy header tuning, Leaflet canvas overlay debugging, Playwright headless screenshot capture, and LaTeX template reformatting. & Audited shell and Python scripts line-by-line; verified multi-VM deployment over SSH/SFTP; executed 11-suite test matrix ($100\%$ pass rate). \\
+    \textbf{GitHub Copilot} & Inline code auto-completion for repetitive Python data structures, Pydantic request models, and CSS flexbox styling. & Verified type annotations, input validation bounds, and cross-browser rendering behavior manually. \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Author Affirmation}: All AI-generated suggestions, code snippets, deployment scripts, and report templates were independently reviewed, thoroughly understood, empirically tested, and customized by the author prior to submission. No unverified or unexamined AI outputs were included in this project.
 
 %% =====================================================================
 \appendix
@@ -339,27 +401,30 @@ In accordance with the assignment's LLM Usage Policy, the following AI tools wer
 \section{Source Code and Repository}
 \label{sec:appendix}
 The complete source code, deployment scripts, frontend static assets, and backend test suites are maintained on GitHub:
-\begin{itemize}
+\begin{itemize}[leftmargin=*]
     \item \textbf{GitHub Repository}: \url{https://github.com/Aj1359/AI-Pond-Planner.git}
-    \item \textbf{Live Application URL}: \url{http://10.1.75.51:4218/ui/}
-    \item \textbf{Interactive Swagger API}: \url{http://10.1.75.51:4218/docs}
+    \item \textbf{Live Application URL}: \url{http://10.1.75.51:4217/ui/}
+    \item \textbf{Interactive Swagger API}: \url{http://10.1.75.51:4217/docs}
+    \item \textbf{YouTube Live Video Demonstration}: \url{https://youtu.be/zH_eiQb3qNg}
 \end{itemize}
 
 \subsection{Repository Folder Structure}
 \begin{lstlisting}[language=bash]
 AI-Pond-Planner/
+|-- .github/workflows/
+|   `-- ci-cd.yml          # Self-contained GitHub Actions CI/CD pipeline
 |-- backend/
 |   |-- app/
 |   |   |-- routers/       # API endpoints (contour, location, map_analysis)
-|   |   |-- services/      # GIS & terrain engines (geocode, contour, analysis)
+|   |   |-- services/      # GIS & terrain engines (geocode, contour, sites)
 |   |   |-- cache.py       # Two-level memory & Supabase PostgreSQL cache
 |   |   `-- main.py        # FastAPI entrypoint & router registration
-|   |-- tests/             # Pytest test suite (33 passing tests)
+|   |-- tests/             # Pytest test suite (11 test matrix suites)
 |   `-- requirements.txt   # Python dependencies
 |-- deploy/
 |   |-- nginx_lb.conf      # Nginx load balancer configuration for VM1
 |   |-- deploy_lb.sh       # VM1 Nginx setup script
-|   `-- deploy_backend.sh  # VM2/VM3/VM4 deployment script
+|   `-- deploy_backend.sh  # VM2/VM3/VM4 worker deployment script
 `-- frontend/
     `-- index.html         # JalSetu Studio single-page Leaflet web application
 \end{lstlisting}

@@ -12,7 +12,10 @@ import urllib.request
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
+import hashlib
 from fastapi import APIRouter, HTTPException, Query
+
+from app import cache as cache_svc
 
 router = APIRouter(prefix="/api/location", tags=["Location Intelligence"])
 
@@ -36,6 +39,12 @@ def search_location(
     Falls back to Open-Meteo Geocoding API (GeoNames-backed) for small
     Indian villages that Nominatim doesn't index.
     """
+    # ── Cache Check ──
+    cache_key = "loc_search_" + hashlib.sha256(f"{q}_{limit}".encode()).hexdigest()[:15]
+    cached = cache_svc.get(cache_key)
+    if cached:
+        return cached
+
     # ── Primary: Nominatim ──
     params = urllib.parse.urlencode({
         "q": q,
@@ -48,7 +57,7 @@ def search_location(
     nominatim_results = []
     try:
         req = urllib.request.Request(url, headers=_NOM_HEADERS)
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=2) as resp:
             nominatim_results = json.loads(resp.read())
     except Exception:
         pass  # fall through to fallback
@@ -115,7 +124,7 @@ def search_location(
             geo_url = f"{_OPENMETEO_GEO}?{geo_params}"
             try:
                 geo_req = urllib.request.Request(geo_url, headers={"User-Agent": "JalSetu/2.0"})
-                with urllib.request.urlopen(geo_req, timeout=8) as geo_resp:
+                with urllib.request.urlopen(geo_req, timeout=2) as geo_resp:
                     geo_data = json.loads(geo_resp.read())
                 for g in geo_data.get("results", []):
                     # Filter to India only
@@ -156,7 +165,9 @@ def search_location(
             except Exception:
                 pass
 
-    return {"results": out, "count": len(out)}
+    result = {"results": out, "count": len(out)}
+    cache_svc.set(cache_key, result)
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -164,8 +175,8 @@ def search_location(
 # ──────────────────────────────────────────────────────────────────────────────
 @router.get("/boundary")
 def get_boundary(
-    osm_type: str = Query(..., description="node | way | relation"),
-    osm_id:   int = Query(..., description="Nominatim OSM id"),
+    osm_type: Optional[str] = Query(None, description="node | way | relation"),
+    osm_id:   Optional[int] = Query(None, description="Nominatim OSM id"),
     q:        Optional[str] = Query(None, description="Fallback: place name to search directly"),
     lat:      Optional[float] = Query(None, description="Fallback lat"),
     lon:      Optional[float] = Query(None, description="Fallback lon"),
@@ -174,34 +185,34 @@ def get_boundary(
     Fetch the GeoJSON polygon boundary for a village/settlement.
     Falls back to bounding-box rectangle if no polygon is available.
     """
-    # Try polygon_geojson=1 directly from search
-    type_map = {"node": "N", "way": "W", "relation": "R"}
-    osm_letter = type_map.get(osm_type.lower(), "R")
+    if osm_type and osm_id:
+        type_map = {"node": "N", "way": "W", "relation": "R"}
+        osm_letter = type_map.get(osm_type.lower(), "R")
 
-    # Use Nominatim /details with polygon_geojson
-    params = urllib.parse.urlencode({
-        "osmtype":      osm_letter,
-        "osmid":        osm_id,
-        "polygon_geojson": 1,
-        "format":       "json",
-    })
-    url = f"{_NOM_DETAIL}?{params}"
-    try:
-        req = urllib.request.Request(url, headers=_NOM_HEADERS)
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read())
-        geom = data.get("geometry")
-        if geom and geom.get("type") in ("Polygon", "MultiPolygon"):
-            return {
-                "type":     "boundary",
-                "geojson":  geom,
-                "source":   "osm_polygon",
-                "name":     data.get("localname", ""),
-                "centroid": {"lat": float(data.get("centroid", {}).get("coordinates", [0,0])[1]),
-                             "lon": float(data.get("centroid", {}).get("coordinates", [0,0])[0])},
-            }
-    except Exception:
-        pass
+        # Use Nominatim /details with polygon_geojson
+        params = urllib.parse.urlencode({
+            "osmtype":      osm_letter,
+            "osmid":        osm_id,
+            "polygon_geojson": 1,
+            "format":       "json",
+        })
+        url = f"{_NOM_DETAIL}?{params}"
+        try:
+            req = urllib.request.Request(url, headers=_NOM_HEADERS)
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                data = json.loads(resp.read())
+            geom = data.get("geometry")
+            if geom and geom.get("type") in ("Polygon", "MultiPolygon"):
+                return {
+                    "type":     "boundary",
+                    "geojson":  geom,
+                    "source":   "osm_polygon",
+                    "name":     data.get("localname", ""),
+                    "centroid": {"lat": float(data.get("centroid", {}).get("coordinates", [0,0])[1]),
+                                 "lon": float(data.get("centroid", {}).get("coordinates", [0,0])[0])},
+                }
+        except Exception:
+            pass
 
     # Fallback: search with polygon_geojson=1
     if q:
@@ -210,7 +221,7 @@ def get_boundary(
         })
         try:
             req2 = urllib.request.Request(f"{_NOM_SEARCH}?{params2}", headers=_NOM_HEADERS)
-            with urllib.request.urlopen(req2, timeout=10) as resp2:
+            with urllib.request.urlopen(req2, timeout=2) as resp2:
                 results = json.loads(resp2.read())
             if results and results[0].get("geojson"):
                 r = results[0]
@@ -246,8 +257,8 @@ def get_boundary(
 
     # Fallback 2: Generate 1.5km box around lat, lon
     if lat is not None and lon is not None:
-        delta_lat = 0.027  # ~3 km
-        delta_lon = 0.027
+        delta_lat = 0.0135  # ~1.5 km radius, 3 km total span (~0.027°)
+        delta_lon = 0.0135
         min_lat, max_lat = lat - delta_lat, lat + delta_lat
         min_lon, max_lon = lon - delta_lon, lon + delta_lon
         return {
@@ -299,7 +310,7 @@ def get_rainfall(
     url = f"{_OPENMETEO}?{params}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "JalSetu/2.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=2) as resp:
             data = json.loads(resp.read())
         daily = data.get("daily", {})
         dates  = daily.get("time", [])

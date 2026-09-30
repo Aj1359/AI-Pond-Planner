@@ -360,6 +360,21 @@ async def extract_polylines(
     intervals = np.diff(elevations) if len(elevations) > 1 else [0.0]
     estimated_interval = float(np.median(intervals)) if len(intervals) > 0 else 0.0
 
+    geojson_features = []
+    for c in contours:
+        geojson_features.append({
+            "type": "Feature",
+            "properties": {"elevation_m": c["elevation_m"]},
+            "geometry": {
+                "type": "LineString",
+                "coordinates": c["points"],
+            }
+        })
+    geojson = {
+        "type": "FeatureCollection",
+        "features": geojson_features,
+    }
+
     return {
         "filename": filename,
         "total_contour_lines": len(contours),
@@ -367,6 +382,7 @@ async def extract_polylines(
         "elevation_max_m": max(elevations) if elevations else 0.0,
         "estimated_interval_m": round(estimated_interval, 2),
         "unique_elevation_levels_count": len(elevations),
+        "geojson": geojson,
     }
 
 

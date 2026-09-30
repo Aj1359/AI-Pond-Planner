@@ -20,11 +20,14 @@ def generate_candidate_sites(dem: np.ndarray, slope: np.ndarray, bbox: dict,
     if mask is not None:
         suitable_mask &= mask
 
-    # Prefer local low points (natural depressions) among suitable cells
-    candidates = []
     ys, xs = np.where(suitable_mask)
     if len(ys) == 0:
-        return []
+        if mask is not None and np.any(mask):
+            ys, xs = np.where(mask)
+        else:
+            # Fallback for steep contour terrain: pick the gentlest slope cells available
+            flat_indices = np.argsort(slope.ravel())[:max(50, top_n * 10)]
+            ys, xs = np.unravel_index(flat_indices, (rows, cols))
 
     # Sample a spread of low-elevation, low-slope points across the whole
     # suitable area (not just the single global lowest spot) by scanning
@@ -32,8 +35,13 @@ def generate_candidate_sites(dem: np.ndarray, slope: np.ndarray, bbox: dict,
     elevations = dem[ys, xs]
     order = np.argsort(elevations)
 
-    min_spacing = max(3, min(rows, cols) // 12)
+    # Dynamically scale spacing so small areas still yield multiple sites
+    min_spacing = max(1, min(rows, cols) // 20)
+    if mask is not None and np.sum(mask) < 100:
+        min_spacing = 1
+
     seen_cells = []
+    candidates = []
     for idx in order:
         r, c = int(ys[idx]), int(xs[idx])
         if any(abs(r - sr) < min_spacing and abs(c - sc) < min_spacing for sr, sc in seen_cells):

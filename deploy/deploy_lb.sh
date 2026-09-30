@@ -17,6 +17,7 @@ sudo pkill -f uvicorn || true
 sleep 1
 
 echo "==> Copying nginx config..."
+sudo rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default
 sudo cp nginx_lb.conf /etc/nginx/nginx.conf
 
 echo "==> Creating cache dir..."
@@ -25,6 +26,7 @@ sudo mkdir -p /var/cache/nginx/pond
 echo "==> Deploying frontend static files..."
 sudo mkdir -p "$FRONTEND_DIR"
 sudo cp -r /home/student/AI-Pond-Planner/frontend/* "$FRONTEND_DIR/"
+sudo chmod -R 755 /var/www/pond_planner
 
 echo "==> Testing nginx config..."
 sudo nginx -t
