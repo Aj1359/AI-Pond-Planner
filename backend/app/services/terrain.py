@@ -112,9 +112,94 @@ def flow_accumulation(direction: np.ndarray) -> np.ndarray:
     return accum
 
 
-def delineate_catchment(direction: np.ndarray, pour_point: tuple[int, int]) -> np.ndarray:
-    """Boolean mask of every cell whose flow path eventually passes through
-    pour_point, found by reverse-tracing D8 directions (BFS upstream)."""
+def mfd_flow_fractions(dem: np.ndarray, p: float = 1.1) -> np.ndarray:
+    """
+    Multiple Flow Direction (MFD, Quinn et al. 1991 / Holmgren 1994).
+    Calculates the proportion of flow leaving cell (r, c) toward each of its 8 neighbors.
+    Returns an array of shape (rows, cols, 8) with values in [0, 1].
+    For cells with no downhill neighbor (sinks), all fractions are 0.
+    """
+    rows, cols = dem.shape
+    fractions = np.zeros((rows, cols, 8), dtype=float)
+
+    for r in range(rows):
+        for c in range(cols):
+            z_curr = dem[r, c]
+            weights = np.zeros(8, dtype=float)
+            for i, (dr, dc) in enumerate(D8_OFFSETS):
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols:
+                    drop = z_curr - dem[nr, nc]
+                    if drop > 0:
+                        dist = np.hypot(dr, dc)
+                        slope = drop / dist
+                        weights[i] = slope ** p
+            total_w = weights.sum()
+            if total_w > 0:
+                fractions[r, c] = weights / total_w
+    return fractions
+
+
+def delineate_catchment_mfd(
+    dem: np.ndarray,
+    pour_point: tuple[int, int],
+    p: float = 1.1,
+    threshold: float = 0.05,
+) -> np.ndarray:
+    """
+    Delineates the upstream catchment for pour_point using Multiple Flow Direction (MFD).
+    Calculates the exact fraction of runoff from every cell that drains into pour_point.
+    Returns a boolean mask of cells contributing >= threshold fraction.
+    """
+    rows, cols = dem.shape
+    fractions = mfd_flow_fractions(dem, p=p)
+
+    # P[r, c] represents the fraction of water from (r, c) that reaches pour_point
+    P = np.zeros((rows, cols), dtype=float)
+    P[pour_point] = 1.0
+
+    # Sort all cells by elevation in ascending order (lowest to highest)
+    # Since water flows strictly downhill (z_source > z_target), processing in
+    # ascending order guarantees that when cell u is processed, all downhill neighbors
+    # v (where z_v < z_u) already have their P[v] values fully determined!
+    sorted_cells = np.argsort(dem.ravel())
+
+    pour_z = dem[pour_point]
+    for idx in sorted_cells:
+        r, c = divmod(int(idx), cols)
+        if dem[r, c] < pour_z:
+            continue
+        if (r, c) == pour_point:
+            continue
+
+        # Accumulate contributions through all downhill neighbors
+        cell_contrib = 0.0
+        for i, (dr, dc) in enumerate(D8_OFFSETS):
+            f = fractions[r, c, i]
+            if f > 0:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols:
+                    cell_contrib += f * P[nr, nc]
+        P[r, c] = cell_contrib
+
+    mask = P >= threshold
+    mask[pour_point] = True
+    return mask
+
+
+def delineate_catchment(
+    direction: np.ndarray,
+    pour_point: tuple[int, int],
+    dem: np.ndarray | None = None,
+    method: str = "mfd",
+    threshold: float = 0.05,
+) -> np.ndarray:
+    """Catchment delineation supporting both MFD (Multiple Flow Direction)
+    and legacy D8 (Single Flow Direction) reverse BFS."""
+    if method == "mfd" and dem is not None:
+        return delineate_catchment_mfd(dem, pour_point, threshold=threshold)
+
+    # Fallback to D8 reverse BFS:
     rows, cols = direction.shape
     mask = np.zeros((rows, cols), dtype=bool)
 

@@ -100,7 +100,7 @@ def _run_analysis(file_bytes: bytes, filename: str, num_candidates: int = 5,
     analyzed_candidates = []
     for candidate in candidates:
         pour_point = (candidate["row"], candidate["col"])
-        mask = terrain.delineate_catchment(direction, pour_point)
+        mask = terrain.delineate_catchment(direction, pour_point, dem=dem, method="mfd")
         area_ha = terrain.catchment_area_ha(mask, cell_size_m)
 
         rows, cols = mask.shape

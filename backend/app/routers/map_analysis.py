@@ -75,7 +75,7 @@ def _run_full_pipeline(bbox: dict, polygon_coords: list, rainfall_mm: float,
     results = []
     for cand in candidates:
         pour_point = (cand["row"], cand["col"])
-        mask = terrain_svc.delineate_catchment(direction, pour_point)
+        mask = terrain_svc.delineate_catchment(direction, pour_point, dem=dem, method="mfd")
         area_ha = terrain_svc.catchment_area_ha(mask, cell_size_m)
 
         # Catchment GeoJSON boundary

@@ -27,7 +27,7 @@ def compute_catchment(village: str, candidate_id: int):
         repo.save_derived_layers(village_row["id"], flow_direction=direction.tolist())
 
     pour_point = (candidate["grid_row"], candidate["grid_col"])
-    mask = terrain.delineate_catchment(direction, pour_point)
+    mask = terrain.delineate_catchment(direction, pour_point, dem=dem, method="mfd")
     area_ha = terrain.catchment_area_ha(mask, cell_size_m)
 
     rows, cols = mask.shape
