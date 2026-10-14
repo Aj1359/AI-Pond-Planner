@@ -187,15 +187,106 @@ def delineate_catchment_mfd(
     return mask
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# HEXAGONAL GRID TOPOLOGY (H6) — Uniform Equidistant Flow Routing
+# ──────────────────────────────────────────────────────────────────────────────
+# In an "odd-r" offset hexagonal layout, every cell has 6 equidistant neighbors (d = 1.0),
+# completely eliminating the sqrt(2) diagonal metric distortion of Cartesian square grids.
+
+HEX_EVEN_R_OFFSETS = [(-1, -1), (-1, 0), (0, 1), (1, 0), (1, -1), (0, -1)]
+HEX_ODD_R_OFFSETS  = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (0, -1)]
+
+
+def get_hex_neighbors(r: int, c: int, rows: int, cols: int) -> list[tuple[int, int]]:
+    """Returns list of (nr, nc) coordinates for the 6 equidistant hexagonal neighbors."""
+    offsets = HEX_ODD_R_OFFSETS if (r % 2 != 0) else HEX_EVEN_R_OFFSETS
+    neighbors = []
+    for dr, dc in offsets:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < rows and 0 <= nc < cols:
+            neighbors.append((nr, nc))
+    return neighbors
+
+
+def hex_flow_fractions(dem: np.ndarray, p: float = 1.1) -> dict[tuple[int, int], dict[tuple[int, int], float]]:
+    """
+    Multiple Flow Direction on a Uniform Hexagonal Grid (H6-MFD).
+    Because all 6 neighbors are strictly equidistant, slope drop is directly proportional
+    to elevation drop without any diagonal sqrt(2) distortion.
+    """
+    rows, cols = dem.shape
+    hex_fractions = {}
+
+    for r in range(rows):
+        for c in range(cols):
+            z_curr = dem[r, c]
+            neighbors = get_hex_neighbors(r, c, rows, cols)
+            weights = []
+            downhill_neighbors = []
+            for nr, nc in neighbors:
+                drop = z_curr - dem[nr, nc]
+                if drop > 0:
+                    downhill_neighbors.append((nr, nc))
+                    weights.append(drop ** p)
+
+            total_w = sum(weights)
+            if total_w > 0:
+                hex_fractions[(r, c)] = {
+                    n_coord: w / total_w
+                    for n_coord, w in zip(downhill_neighbors, weights)
+                }
+            else:
+                hex_fractions[(r, c)] = {}
+    return hex_fractions
+
+
+def delineate_catchment_hex(
+    dem: np.ndarray,
+    pour_point: tuple[int, int],
+    p: float = 1.1,
+    threshold: float = 0.05,
+) -> np.ndarray:
+    """
+    Catchment delineation on a Uniform Hexagonal Grid.
+    Eliminates diagonal distance bias (all 6 neighbors share identical edge length and distance).
+    """
+    rows, cols = dem.shape
+    fractions_map = hex_flow_fractions(dem, p=p)
+
+    P = np.zeros((rows, cols), dtype=float)
+    P[pour_point] = 1.0
+
+    sorted_cells = np.argsort(dem.ravel())
+    pour_z = dem[pour_point]
+
+    for idx in sorted_cells:
+        r, c = divmod(int(idx), cols)
+        if dem[r, c] < pour_z:
+            continue
+        if (r, c) == pour_point:
+            continue
+
+        cell_contrib = 0.0
+        for (nr, nc), f in fractions_map.get((r, c), {}).items():
+            cell_contrib += f * P[nr, nc]
+        P[r, c] = cell_contrib
+
+    mask = P >= threshold
+    mask[pour_point] = True
+    return mask
+
+
 def delineate_catchment(
     direction: np.ndarray,
     pour_point: tuple[int, int],
     dem: np.ndarray | None = None,
-    method: str = "mfd",
+    method: str = "hexagonal",
     threshold: float = 0.05,
 ) -> np.ndarray:
-    """Catchment delineation supporting both MFD (Multiple Flow Direction)
-    and legacy D8 (Single Flow Direction) reverse BFS."""
+    """Catchment delineation supporting Uniform Hexagonal Grid (H6),
+    Multiple Flow Direction (MFD on square grids), and legacy D8 reverse BFS."""
+    if method in ("hex", "hexagonal") and dem is not None:
+        return delineate_catchment_hex(dem, pour_point, threshold=threshold)
     if method == "mfd" and dem is not None:
         return delineate_catchment_mfd(dem, pour_point, threshold=threshold)
 
